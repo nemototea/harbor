@@ -618,6 +618,7 @@ async function saveSpaceModal() {
   }
   await saveMeta();
   closeSpaceModal();
+  await renderAll(); // color lives in meta, not bookmarks — render explicitly
 }
 async function deleteSpace() {
   if (!spaceCtx || !spaceCtx.id) return;
