@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Harbor",
+  "version": "0.1.0",
+  "description": "戻り先を錨(Anchor)としてグリッド管理するサイドパネル。タブを保存場所にしない。",
+  "minimum_chrome_version": "114",
+  "permissions": ["sidePanel", "tabs", "storage", "favicon", "tabGroups"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Harbor を開く"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Ctrl+Shift+K", "mac": "Command+Shift+K" },
+      "description": "Harbor を開く / 閉じる"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

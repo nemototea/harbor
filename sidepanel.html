@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Harbor</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"></span>
+        <span class="brand-name">HARBOR</span>
+      </div>
+      <button id="editToggle" class="icon-btn" title="編集モード">編集</button>
+    </header>
+
+    <nav class="spaces" id="spaces" aria-label="スペース"></nav>
+
+    <main class="content">
+      <section class="block">
+        <div class="block-head">
+          <span class="tag tag-anchor">ANCHORED</span>
+          <span class="count" id="anchorCount"></span>
+        </div>
+        <div class="grid" id="anchorGrid"></div>
+      </section>
+
+      <section class="block">
+        <div class="block-head">
+          <span class="tag tag-live">LIVE</span>
+          <span class="count" id="liveCount"></span>
+        </div>
+        <ul class="tablist" id="liveList"></ul>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span id="hint">クリックで開く · 編集で並べ替え/削除</span>
+    </footer>
+  </div>
+
+  <!-- edit / add modal -->
+  <div class="overlay hidden" id="overlay">
+    <div class="modal">
+      <h2 id="modalTitle">錨を編集</h2>
+      <label>名前<input type="text" id="fTitle" autocomplete="off" /></label>
+      <label>URL<input type="text" id="fUrl" autocomplete="off" spellcheck="false" /></label>
+      <label>スペース<select id="fSpace"></select></label>
+      <div class="modal-actions">
+        <button id="mDelete" class="btn btn-danger">削除</button>
+        <span class="spacer"></span>
+        <button id="mCancel" class="btn">キャンセル</button>
+        <button id="mSave" class="btn btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- space modal -->
+  <div class="overlay hidden" id="spaceOverlay">
+    <div class="modal">
+      <h2 id="spaceModalTitle">スペース</h2>
+      <label>名前<input type="text" id="sName" autocomplete="off" /></label>
+      <label>色
+        <div class="swatches" id="sSwatches"></div>
+      </label>
+      <div class="modal-actions">
+        <button id="sDelete" class="btn btn-danger">削除</button>
+        <span class="spacer"></span>
+        <button id="sCancel" class="btn">キャンセル</button>
+        <button id="sSave" class="btn btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
