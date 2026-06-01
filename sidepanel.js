@@ -215,7 +215,38 @@ function renderSpaces(spaces) {
   add.title = "スペースを追加（バーにフォルダを作成）";
   add.addEventListener("click", () => openSpaceModal("add"));
   nav.appendChild(add);
+  // keep the active pill visible when switching via keys / swipe
+  const act = nav.querySelector(".space-pill.active");
+  if (act) act.scrollIntoView({ inline: "center", block: "nearest" });
 }
+
+/* ---------- Arc-style horizontal swipe to switch spaces ---------- */
+let swipeAccum = 0, swipeLast = 0, swipeWheelTs = 0;
+const SWIPE_THRESH = 200;
+async function switchSpace(dir) {
+  const spaces = await getSpaces();
+  if (!spaces.length) return;
+  let i = spaces.findIndex((s) => s.id === meta.activeSpaceId);
+  if (i < 0) i = 0;
+  const ni = Math.max(0, Math.min(spaces.length - 1, i + dir));
+  if (ni === i) return;
+  meta.activeSpaceId = spaces[ni].id; saveMeta(); renderAll();
+}
+function wireSpaceSwipe() {
+  window.addEventListener("wheel", (e) => {
+    // let the horizontally-scrollable rails consume their own gestures first
+    if (e.target.closest && (e.target.closest(".spaces") || e.target.closest(".pins"))) return;
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) * 1.2) return; // ignore vertical/diagonal scrolls
+    const now = Date.now();
+    if (now - swipeWheelTs > 250) swipeAccum = 0; // reset a stale gesture
+    swipeWheelTs = now;
+    if (now - swipeLast < 550) return;            // cooldown between switches
+    swipeAccum += e.deltaX;
+    if (swipeAccum > SWIPE_THRESH) { swipeAccum = 0; swipeLast = now; switchSpace(1); }
+    else if (swipeAccum < -SWIPE_THRESH) { swipeAccum = 0; swipeLast = now; switchSpace(-1); }
+  }, { passive: true });
+}
+
 function wireSpaceDrag(pill, space) {
   pill.addEventListener("dragstart", (e) => { dnd = { kind: "space", id: space.id }; pill.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; });
   pill.addEventListener("dragend", () => { pill.classList.remove("dragging"); $("#spaces").querySelectorAll(".space-pill").forEach((p) => p.classList.remove("drop-before", "drop-after")); dnd = null; });
@@ -683,6 +714,8 @@ function wireStaticUi() {
     .forEach((ev) => { if (chrome.tabs[ev]) chrome.tabs[ev].addListener(scheduleRender); });
   if (chrome.tabGroups) ["onCreated", "onUpdated", "onRemoved", "onMoved"]
     .forEach((ev) => { if (chrome.tabGroups[ev]) chrome.tabGroups[ev].addListener(scheduleRender); });
+
+  wireSpaceSwipe();
 }
 
 (async function init() {
