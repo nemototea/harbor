@@ -13,35 +13,53 @@
         <span class="mark" aria-hidden="true"></span>
         <span class="brand-name">HARBOR</span>
       </div>
-      <button id="editToggle" class="icon-btn" title="編集モード">編集</button>
+      <div class="topbar-tools">
+        <div class="filter-wrap">
+          <input id="filter" class="filter" type="text" placeholder="絞り込み" autocomplete="off" spellcheck="false" aria-label="錨を絞り込み" />
+        </div>
+        <button id="densityToggle" class="icon-btn" title="表示密度を切り替え" aria-label="表示密度">⊟</button>
+        <button id="editToggle" class="icon-btn" title="編集モード">編集</button>
+      </div>
     </header>
 
     <nav class="spaces" id="spaces" aria-label="スペース"></nav>
 
     <main class="content">
-      <section class="block">
+      <section class="block block-anchored">
         <div class="block-head">
           <span class="tag tag-anchor">ANCHORED</span>
           <span class="count" id="anchorCount"></span>
+          <span class="spacer"></span>
+          <button id="spaceOpenAll" class="mini-btn" title="このスペースの錨をすべて開く">すべて開く</button>
         </div>
-        <div class="grid" id="anchorGrid"></div>
+        <div class="anchored-scroll" id="anchoredScroll">
+          <!-- main grid + sections injected here -->
+        </div>
       </section>
 
-      <section class="block">
+      <section class="block block-live">
         <div class="block-head">
           <span class="tag tag-live">LIVE</span>
           <span class="count" id="liveCount"></span>
+          <span class="spacer"></span>
+          <button id="tidyBtn" class="mini-btn" title="錨になっていないタブを閉じる">片付け</button>
         </div>
         <ul class="tablist" id="liveList"></ul>
       </section>
     </main>
 
     <footer class="footer">
-      <span id="hint">クリックで開く · 編集で並べ替え/削除</span>
+      <span id="hint">クリックで開く · タブをグリッドへドラッグで係留 · 1–9 でスペース切替</span>
     </footer>
   </div>
 
-  <!-- edit / add modal -->
+  <!-- undo snackbar -->
+  <div class="snackbar hidden" id="snackbar">
+    <span id="snackMsg"></span>
+    <button id="snackUndo" class="snack-undo">元に戻す</button>
+  </div>
+
+  <!-- edit / add anchor modal -->
   <div class="overlay hidden" id="overlay">
     <div class="modal">
       <h2 id="modalTitle">錨を編集</h2>
