@@ -1,24 +1,28 @@
 /* ============================================================
-   Harbor — side panel logic (v0.2, bookmark-backed)
+   Harbor — side panel logic (v0.3, bookmark-backed)
 
    Source of truth = the Bookmarks Bar.
-     - Space            = a folder directly under the bar
-     - "バー" space      = the loose bookmarks sitting on the bar itself
-     - Anchor           = a bookmark (url node)
-     - Section          = a sub-folder inside a space folder
-   Harbor only stores a thin metadata layer in chrome.storage.local:
-     harbor:meta:v2 = {
-       spaceColor:      { [folderId]: "#hex" },
-       collapsed:       { [folderId]: true },
-       activeSpaceId:   string,
-       density:         "compact" | "cozy"
-     }
+     - Space   = a FOLDER directly under the bar   (pills, 1–9)
+     - Pin     = a loose bookmark sitting on the bar itself (always-visible rail)
+     - Anchor  = a bookmark (url node) inside a space folder
+     - Section = a sub-folder inside a space folder (collapsible)
+   LIVE behaves like a vertical-tab manager: tabs grouped by Chrome
+   tab groups (color/title/collapse/add/create/ungroup), split-view aware.
+
+   Harbor stores only a thin metadata layer in chrome.storage.local:
+     harbor:meta:v2 = { spaceColor:{id:hex}, collapsed:{id:true},
+                        activeSpaceId, density }
    ============================================================ */
 
 const META_KEY = "harbor:meta:v2";
 const FAVICON_SIZE = 32;
 const SWATCHES = ["#f5b740", "#4dd6c8", "#9b8cff", "#f0604d", "#6ea8fe", "#7bd88f", "#e879c7"];
-const BAR_SPACE = "__bar__"; // virtual id for the loose-bar space
+const NONE = -1; // chrome.tabs.TAB_GROUP_ID_NONE
+const GROUP_COLORS = {
+  grey: "#9aa0a6", blue: "#6ea8fe", red: "#f0604d", yellow: "#f5b740",
+  green: "#7bd88f", pink: "#e879c7", purple: "#9b8cff", cyan: "#4dd6c8", orange: "#f59f4d",
+};
+const GROUP_COLOR_NAMES = Object.keys(GROUP_COLORS);
 
 let barId = null;
 let meta = null;
@@ -27,9 +31,9 @@ let filterText = "";
 let liveTabs = [];
 let modalCtx = null;
 let spaceCtx = null;
-let undoCtx = null;     // { msg, fn }
+let undoCtx = null;
 let snackTimer = null;
-let dnd = null;         // current drag payload
+let dnd = null;
 
 /* ---------- utils ---------- */
 const $ = (sel) => document.querySelector(sel);
@@ -42,76 +46,71 @@ function faviconUrl(pageUrl) {
 function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
 }
+function litKey(url) {
+  try { const u = new URL(url); return u.origin + u.pathname; } catch { return url || ""; }
+}
 function sameTarget(a, b) {
-  try {
-    const x = new URL(a), y = new URL(b);
-    return x.origin === y.origin && x.pathname === y.pathname;
-  } catch { return a === b; }
+  try { const x = new URL(a), y = new URL(b); return x.origin === y.origin && x.pathname === y.pathname; }
+  catch { return a === b; }
 }
 const norm = (s) => (s || "").toLowerCase();
+const isFolder = (n) => !n.url;
+const isAnchor = (n) => !!n.url;
+const splitNone = () => (chrome.tabs && chrome.tabs.SPLIT_VIEW_ID_NONE != null ? chrome.tabs.SPLIT_VIEW_ID_NONE : -1);
 
-/* ---------- metadata persistence ---------- */
-function defaultMeta() {
-  return { spaceColor: {}, collapsed: {}, activeSpaceId: BAR_SPACE, density: "compact" };
-}
+/* ---------- metadata ---------- */
+function defaultMeta() { return { spaceColor: {}, collapsed: {}, activeSpaceId: null, density: "compact" }; }
 async function loadMeta() {
   const obj = await chrome.storage.local.get(META_KEY);
   meta = Object.assign(defaultMeta(), obj[META_KEY] || {});
 }
-async function saveMeta() {
-  await chrome.storage.local.set({ [META_KEY]: meta });
-}
-function colorFor(spaceId, idx) {
-  return meta.spaceColor[spaceId] || SWATCHES[idx % SWATCHES.length];
-}
+async function saveMeta() { await chrome.storage.local.set({ [META_KEY]: meta }); }
+function colorFor(id, idx) { return meta.spaceColor[id] || SWATCHES[(idx || 0) % SWATCHES.length]; }
 
-/* ---------- bookmark helpers ---------- */
+/* ---------- bookmark model ---------- */
 async function resolveBarId() {
   const tree = await chrome.bookmarks.getTree();
-  const root = tree[0];
-  const kids = root.children || [];
+  const kids = (tree[0] && tree[0].children) || [];
   const bar =
     kids.find((c) => c.folderType === "bookmarks-bar") ||
     kids.find((c) => c.id === "1") ||
-    kids.find((c) => !c.url) ||
-    kids[0];
+    kids.find((c) => !c.url) || kids[0];
   return bar ? bar.id : "1";
 }
-const isFolder = (n) => !n.url;
-const isAnchor = (n) => !!n.url;
-
-// Spaces = bar itself (loose bookmarks) + each direct child folder of the bar.
+// Spaces = direct child FOLDERS of the bar (loose bookmarks are NOT spaces).
 async function getSpaces() {
-  const barKids = await chrome.bookmarks.getChildren(barId);
-  const spaces = [{ id: BAR_SPACE, folderId: barId, name: "バー", fixed: true }];
-  barKids.filter(isFolder).forEach((f) => {
-    spaces.push({ id: f.id, folderId: f.id, name: f.title || "(無題)", fixed: false });
-  });
-  return spaces;
+  const kids = await chrome.bookmarks.getChildren(barId);
+  return kids.filter(isFolder).map((f) => ({ id: f.id, name: f.title || "(無題)", index: f.index }));
 }
-// folder id backing a given space id
-function folderIdOf(space) { return space.id === BAR_SPACE ? barId : space.id; }
-
-// Returns { anchors:[node], sections:[{folder, anchors:[node]}] } for a space.
-async function readSpace(space) {
-  const fid = folderIdOf(space);
-  const kids = await chrome.bookmarks.getChildren(fid);
+async function getPins() {
+  const kids = await chrome.bookmarks.getChildren(barId);
+  return kids.filter(isAnchor);
+}
+async function readSpace(spaceId) {
+  const kids = await chrome.bookmarks.getChildren(spaceId);
   const anchors = kids.filter(isAnchor);
-  // The bar space must NOT show its sub-folders (those ARE the other spaces).
-  const sections = space.id === BAR_SPACE
-    ? []
-    : await Promise.all(
-        kids.filter(isFolder).map(async (f) => ({
-          folder: f,
-          anchors: (await chrome.bookmarks.getChildren(f.id)).filter(isAnchor),
-        }))
-      );
+  const sections = await Promise.all(
+    kids.filter(isFolder).map(async (f) => ({
+      folder: f, anchors: (await chrome.bookmarks.getChildren(f.id)).filter(isAnchor),
+    }))
+  );
   return { anchors, sections };
 }
-
 async function activeSpace(spaces) {
   spaces = spaces || (await getSpaces());
+  if (!spaces.length) return null;
   return spaces.find((s) => s.id === meta.activeSpaceId) || spaces[0];
+}
+async function allAnchorKeys() {
+  const sub = await chrome.bookmarks.getSubTree(barId);
+  const keys = new Set();
+  const walk = (n) => { if (n.url) keys.add(litKey(n.url)); (n.children || []).forEach(walk); };
+  (sub[0].children || []).forEach(walk);
+  return keys;
+}
+async function currentlyOpenUrls() {
+  const tabs = await chrome.tabs.query({});
+  return new Set(tabs.filter((t) => t.url).map((t) => litKey(t.url)));
 }
 
 /* ---------- tab actions ---------- */
@@ -121,9 +120,7 @@ async function openUrl(url) {
   if (match) {
     await chrome.tabs.update(match.id, { active: true });
     if (match.windowId != null) await chrome.windows.update(match.windowId, { focused: true });
-  } else {
-    await chrome.tabs.create({ url });
-  }
+  } else { await chrome.tabs.create({ url }); }
 }
 async function resetActiveTo(url) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -133,74 +130,59 @@ async function resetActiveTo(url) {
 /* ---------- space verbs ---------- */
 async function openAllInActiveSpace() {
   const space = await activeSpace();
-  const { anchors, sections } = await readSpace(space);
+  if (!space) return;
+  const { anchors, sections } = await readSpace(space.id);
   const all = [...anchors, ...sections.flatMap((s) => s.anchors)];
   if (!all.length) return;
   const created = [];
-  for (const a of all) {
-    const tab = await chrome.tabs.create({ url: a.url, active: false });
-    created.push(tab.id);
-  }
+  for (const a of all) { const tab = await chrome.tabs.create({ url: a.url, active: false }); created.push(tab.id); }
   if (chrome.tabGroups && created.length) {
     try {
       const gid = await chrome.tabs.group({ tabIds: created });
-      await chrome.tabGroups.update(gid, { title: space.name, color: "yellow" });
-    } catch { /* grouping is best-effort */ }
+      await chrome.tabGroups.update(gid, { title: space.name });
+    } catch { /* best effort */ }
   }
 }
 async function tidyLiveTabs() {
-  const space = await activeSpace();
-  const { anchors, sections } = await readSpace(space);
-  const anchored = [...anchors, ...sections.flatMap((s) => s.anchors)];
+  const saved = await allAnchorKeys();
   const tabs = await chrome.tabs.query({ currentWindow: true });
-  const toClose = tabs.filter(
-    (t) => !t.active && !t.pinned && t.url && !anchored.some((a) => sameTarget(a.url, t.url))
-  );
+  const toClose = tabs.filter((t) => !t.active && !t.pinned && t.url && !saved.has(litKey(t.url)));
   if (!toClose.length) return;
-  if (!confirm(`錨になっていないタブ ${toClose.length} 件を閉じます。よろしいですか?`)) return;
+  if (!confirm(`どこにも保存していないタブ ${toClose.length} 件を閉じます。よろしいですか?`)) return;
   await chrome.tabs.remove(toClose.map((t) => t.id));
 }
 
-/* ---------- mutations (bookmarks) ---------- */
+/* ---------- mutations ---------- */
 async function createAnchor(parentId, title, url, index) {
   const opts = { parentId, title: title || hostOf(url), url };
   if (index != null) opts.index = index;
   return chrome.bookmarks.create(opts);
 }
 async function removeAnchorWithUndo(node) {
-  const parentId = node.parentId;
-  const index = node.index;
-  const title = node.title;
-  const url = node.url;
+  const { parentId, index, title, url } = node;
   await chrome.bookmarks.remove(node.id);
-  showUndo(`「${title || hostOf(url)}」を削除`, async () => {
-    await createAnchor(parentId, title, url, index);
-  });
+  showUndo(`「${title || hostOf(url)}」を削除`, async () => { await createAnchor(parentId, title, url, index); });
 }
 
 /* ---------- undo snackbar ---------- */
 function showUndo(msg, fn) {
-  undoCtx = { msg, fn };
+  undoCtx = { fn };
   $("#snackMsg").textContent = msg;
   $("#snackbar").classList.remove("hidden");
   clearTimeout(snackTimer);
   snackTimer = setTimeout(hideUndo, 6000);
 }
-function hideUndo() {
-  $("#snackbar").classList.add("hidden");
-  undoCtx = null;
-}
-async function runUndo() {
-  if (undoCtx) { const fn = undoCtx.fn; hideUndo(); await fn(); }
-}
+function hideUndo() { $("#snackbar").classList.add("hidden"); undoCtx = null; }
+async function runUndo() { if (undoCtx) { const fn = undoCtx.fn; hideUndo(); await fn(); } }
 
 /* ============================================================
    RENDER
    ============================================================ */
 async function renderAll() {
   const spaces = await getSpaces();
-  if (!spaces.find((s) => s.id === meta.activeSpaceId)) meta.activeSpaceId = spaces[0].id;
+  if (spaces.length && !spaces.find((s) => s.id === meta.activeSpaceId)) meta.activeSpaceId = spaces[0].id;
   renderSpaces(spaces);
+  await renderPins();
   await renderAnchored(spaces);
   await renderLive();
 }
@@ -215,18 +197,16 @@ function renderSpaces(spaces) {
     pill.className = "space-pill" + (s.id === meta.activeSpaceId ? " active" : "");
     pill.style.setProperty("--pill-color", color);
     pill.dataset.id = s.id;
-    pill.draggable = !s.fixed;
+    pill.draggable = true;
     pill.innerHTML =
-      `<span class="dot" style="background:${color}"></span>` +
-      `<span class="space-name"></span>` +
-      (s.fixed ? "" : `<span class="space-edit" title="編集">✎</span>`);
+      `<span class="dot" style="background:${color}"></span><span class="space-name"></span>` +
+      `<span class="space-edit" title="編集">✎</span>`;
     pill.querySelector(".space-name").textContent = s.name;
     pill.addEventListener("click", (e) => {
       if (e.target.classList.contains("space-edit")) { openSpaceModal("edit", s, idx); return; }
       meta.activeSpaceId = s.id; saveMeta(); renderAll();
     });
-    // drag-reorder folders (bar space is fixed/first)
-    if (!s.fixed) wireSpaceDrag(pill, s);
+    wireSpaceDrag(pill, s);
     nav.appendChild(pill);
   });
   const add = document.createElement("button");
@@ -236,96 +216,119 @@ function renderSpaces(spaces) {
   add.addEventListener("click", () => openSpaceModal("add"));
   nav.appendChild(add);
 }
-
 function wireSpaceDrag(pill, space) {
-  pill.addEventListener("dragstart", (e) => {
-    dnd = { kind: "space", id: space.id };
-    pill.classList.add("dragging");
-    e.dataTransfer.effectAllowed = "move";
-  });
-  pill.addEventListener("dragend", () => {
-    pill.classList.remove("dragging");
-    $("#spaces").querySelectorAll(".space-pill").forEach((p) => p.classList.remove("drop-before", "drop-after"));
-    dnd = null;
-  });
+  pill.addEventListener("dragstart", (e) => { dnd = { kind: "space", id: space.id }; pill.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; });
+  pill.addEventListener("dragend", () => { pill.classList.remove("dragging"); $("#spaces").querySelectorAll(".space-pill").forEach((p) => p.classList.remove("drop-before", "drop-after")); dnd = null; });
   pill.addEventListener("dragover", (e) => {
     if (!dnd || dnd.kind !== "space" || dnd.id === space.id) return;
     e.preventDefault();
-    const r = pill.getBoundingClientRect();
-    const after = e.clientX > r.left + r.width / 2;
-    pill.classList.toggle("drop-after", after);
-    pill.classList.toggle("drop-before", !after);
+    const r = pill.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2;
+    pill.classList.toggle("drop-after", after); pill.classList.toggle("drop-before", !after);
   });
   pill.addEventListener("dragleave", () => pill.classList.remove("drop-before", "drop-after"));
   pill.addEventListener("drop", async (e) => {
     if (!dnd || dnd.kind !== "space" || dnd.id === space.id) return;
     e.preventDefault();
-    const r = pill.getBoundingClientRect();
-    const after = e.clientX > r.left + r.width / 2;
+    const r = pill.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2;
     await moveSpaceFolder(dnd.id, space.id, after);
   });
 }
-
 async function moveSpaceFolder(srcId, targetId, after) {
-  // index is among the bar's children; the bar space (loose bookmarks) isn't a folder, so skip it.
-  const barKids = await chrome.bookmarks.getChildren(barId);
-  const folders = barKids.filter(isFolder);
+  const folders = (await chrome.bookmarks.getChildren(barId)).filter(isFolder);
   const target = folders.find((f) => f.id === targetId);
   const src = folders.find((f) => f.id === srcId);
   if (!target || !src) return;
   let destIndex = target.index + (after ? 1 : 0);
-  if (src.index < destIndex) destIndex -= 1; // account for removal shift within same parent
+  if (src.index < destIndex) destIndex -= 1;
   await chrome.bookmarks.move(srcId, { parentId: barId, index: destIndex });
+}
+
+/* ---------- pins (loose bar bookmarks) ---------- */
+async function renderPins() {
+  const wrap = $("#pins");
+  const pins = await getPins();
+  $("#pinCount").textContent = pins.length ? String(pins.length) : "";
+  wrap.innerHTML = "";
+  wirePinsDrop(wrap);
+
+  pins.forEach((p) => {
+    const chip = document.createElement("div");
+    chip.className = "pin";
+    chip.draggable = true;
+    chip.dataset.id = p.id;
+    chip.title = `${p.title || ""}\n${p.url}`;
+    const img = document.createElement("img");
+    img.className = "pin-fav"; img.src = faviconUrl(p.url); img.alt = "";
+    const del = document.createElement("button");
+    del.className = "pin-del"; del.textContent = "×"; del.title = "ピンを削除";
+    del.addEventListener("click", (e) => { e.stopPropagation(); removeAnchorWithUndo(p); });
+    chip.append(img, del);
+    chip.addEventListener("click", () => openUrl(p.url));
+    wireAnchorDrag(chip, p, barId);
+    wrap.appendChild(chip);
+  });
+
+  const add = document.createElement("button");
+  add.className = "pin-add";
+  add.textContent = "+";
+  add.title = "現在のタブをピン";
+  add.addEventListener("click", async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab && tab.url) await createAnchor(barId, tab.title, tab.url);
+  });
+  wrap.appendChild(add);
+
+  if (!pins.length) {
+    const hint = document.createElement("span");
+    hint.className = "pin-hint";
+    hint.textContent = "タブをここへドラッグでピン";
+    wrap.appendChild(hint);
+  }
+}
+function wirePinsDrop(wrap) {
+  wrap.addEventListener("dragover", (e) => { if (!dnd) return; e.preventDefault(); wrap.classList.add("drop-into"); });
+  wrap.addEventListener("dragleave", (e) => { if (e.target === wrap) wrap.classList.remove("drop-into"); });
+  wrap.addEventListener("drop", async (e) => { if (!dnd) return; e.preventDefault(); wrap.classList.remove("drop-into"); await dropOnto(barId, null); });
 }
 
 /* ---------- anchored grid + sections ---------- */
 async function renderAnchored(spaces) {
   spaces = spaces || (await getSpaces());
-  const space = await activeSpace(spaces);
+  document.querySelector(".app").classList.toggle("dense", meta.density === "compact");
   const wrap = $("#anchoredScroll");
   wrap.innerHTML = "";
-  document.querySelector(".app").classList.toggle("dense", meta.density === "compact");
 
-  const { anchors, sections } = await readSpace(space);
+  const space = await activeSpace(spaces);
+  $("#spaceTitle").textContent = space ? space.name : "";
+
+  if (!space) {
+    $("#anchorCount").textContent = "";
+    const empty = document.createElement("div");
+    empty.className = "empty-hint";
+    empty.innerHTML = `スペースがありません。<br>上部の「＋」でブックマークバーにフォルダ＝スペースを作成。<br>裸のブックマークは上の PINS に並びます。`;
+    wrap.appendChild(empty);
+    return;
+  }
+
+  const { anchors, sections } = await readSpace(space.id);
   const total = anchors.length + sections.reduce((n, s) => n + s.anchors.length, 0);
   $("#anchorCount").textContent = total ? String(total) : "";
-
   const lit = await currentlyOpenUrls();
 
-  // main grid (space-level anchors)
-  const mainGrid = buildGrid(folderIdOf(space), anchors, lit);
+  const mainGrid = buildGrid(space.id, anchors, lit);
+  appendAddTile(mainGrid, space.id);
   wrap.appendChild(mainGrid);
 
-  // "add current tab" tile lives in the main grid
-  appendAddTile(mainGrid, folderIdOf(space));
-
-  // sections (sub-folders)
   sections.forEach((sec) => {
     const collapsed = !!meta.collapsed[sec.folder.id];
     const head = document.createElement("div");
     head.className = "section-head" + (collapsed ? " collapsed" : "");
-    head.innerHTML =
-      `<span class="caret">▸</span><span class="section-name"></span>` +
-      `<span class="section-count">${sec.anchors.length}</span>`;
+    head.innerHTML = `<span class="caret">▸</span><span class="section-name"></span><span class="section-count">${sec.anchors.length}</span>`;
     head.querySelector(".section-name").textContent = sec.folder.title || "(無題)";
-    head.addEventListener("click", () => {
-      meta.collapsed[sec.folder.id] = !collapsed; saveMeta(); renderAnchored();
-    });
+    head.addEventListener("click", () => { meta.collapsed[sec.folder.id] = !collapsed; saveMeta(); renderAnchored(); });
     wrap.appendChild(head);
-    if (!collapsed) {
-      const grid = buildGrid(sec.folder.id, sec.anchors, lit);
-      wrap.appendChild(grid);
-    }
+    if (!collapsed) wrap.appendChild(buildGrid(sec.folder.id, sec.anchors, lit));
   });
-
-  if (total === 0 && space.id === BAR_SPACE) {
-    const empty = document.createElement("div");
-    empty.className = "empty-hint";
-    empty.innerHTML =
-      `ブックマークバーが空です。<br>下のタブをここへドラッグするか「＋ 現在のタブ」で錨を作成。<br>` +
-      `「＋」スペースでバーにフォルダ＝スペースを追加できます。`;
-    wrap.appendChild(empty);
-  }
 }
 
 function buildGrid(parentId, anchors, litSet) {
@@ -333,51 +336,25 @@ function buildGrid(parentId, anchors, litSet) {
   grid.className = "grid";
   grid.dataset.parent = parentId;
   wireGridDrop(grid, parentId);
-
   anchors.forEach((a) => {
     const hit = filterText && !(norm(a.title).includes(filterText) || norm(a.url).includes(filterText));
     const tile = document.createElement("div");
     tile.className = "tile" + (litSet.has(litKey(a.url)) ? " lit" : "") + (hit ? " dim" : "");
-    tile.draggable = true;
-    tile.dataset.id = a.id;
-
-    const img = document.createElement("img");
-    img.className = "fav";
-    img.src = faviconUrl(a.url);
-    img.alt = "";
-
-    const label = document.createElement("span");
-    label.className = "label";
-    label.textContent = a.title || hostOf(a.url);
-    tile.title = `${a.title || ""}\n${a.url}`;
-
-    const reset = document.createElement("button");
-    reset.className = "reset";
-    reset.title = "今のタブをこのURLに戻す";
-    reset.textContent = "⟲";
+    tile.draggable = true; tile.dataset.id = a.id; tile.title = `${a.title || ""}\n${a.url}`;
+    const img = document.createElement("img"); img.className = "fav"; img.src = faviconUrl(a.url); img.alt = "";
+    const label = document.createElement("span"); label.className = "label"; label.textContent = a.title || hostOf(a.url);
+    const reset = document.createElement("button"); reset.className = "reset"; reset.title = "今のタブをこのURLに戻す"; reset.textContent = "⟲";
     reset.addEventListener("click", (e) => { e.stopPropagation(); resetActiveTo(a.url); });
-
-    const badge = document.createElement("button");
-    badge.className = "badge";
-    badge.title = "削除（ブックマークを削除）";
-    badge.textContent = "×";
+    const badge = document.createElement("button"); badge.className = "badge"; badge.title = "削除（ブックマークを削除）"; badge.textContent = "×";
     badge.addEventListener("click", (e) => { e.stopPropagation(); removeAnchorWithUndo(a); });
-
-    const dock = document.createElement("span");
-    dock.className = "dock-dot";
-    dock.title = "現在このタブが開いています";
-
+    const dock = document.createElement("span"); dock.className = "dock-dot"; dock.title = "現在このタブが開いています";
     tile.append(reset, img, label, badge, dock);
-    tile.addEventListener("click", () => {
-      if (editing) openAnchorModal("edit", a);
-      else openUrl(a.url);
-    });
-    wireTileDrag(tile, a, parentId);
+    tile.addEventListener("click", () => { if (editing) openAnchorModal("edit", a); else openUrl(a.url); });
+    wireAnchorDrag(tile, a, parentId);
     grid.appendChild(tile);
   });
   return grid;
 }
-
 function appendAddTile(grid, parentId) {
   const add = document.createElement("div");
   add.className = "tile add";
@@ -389,68 +366,41 @@ function appendAddTile(grid, parentId) {
   grid.appendChild(add);
 }
 
-/* ---------- anchor & live drag/drop ---------- */
-function wireTileDrag(tile, node, parentId) {
-  tile.addEventListener("dragstart", (e) => {
-    dnd = { kind: "anchor", id: node.id, fromParent: parentId };
-    tile.classList.add("dragging");
-    e.dataTransfer.effectAllowed = "move";
-  });
-  tile.addEventListener("dragend", () => {
-    tile.classList.remove("dragging");
-    document.querySelectorAll(".tile").forEach((t) => t.classList.remove("drop-before", "drop-after"));
-    document.querySelectorAll(".grid").forEach((g) => g.classList.remove("drop-into"));
+/* ---------- DnD for anchors/pins ---------- */
+function wireAnchorDrag(el, node, parentId) {
+  el.addEventListener("dragstart", (e) => { dnd = { kind: "anchor", id: node.id, fromParent: parentId }; el.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; });
+  el.addEventListener("dragend", () => {
+    el.classList.remove("dragging");
+    document.querySelectorAll(".tile,.pin").forEach((t) => t.classList.remove("drop-before", "drop-after"));
+    document.querySelectorAll(".grid,.pins").forEach((g) => g.classList.remove("drop-into"));
     dnd = null;
   });
-  tile.addEventListener("dragover", (e) => {
-    if (!dnd) return;
-    if (dnd.kind === "anchor" && dnd.id === node.id) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const r = tile.getBoundingClientRect();
-    const after = e.clientX > r.left + r.width / 2;
-    tile.classList.toggle("drop-after", after);
-    tile.classList.toggle("drop-before", !after);
+  el.addEventListener("dragover", (e) => {
+    if (!dnd || (dnd.kind === "anchor" && dnd.id === node.id)) return;
+    e.preventDefault(); e.stopPropagation();
+    const r = el.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2;
+    el.classList.toggle("drop-after", after); el.classList.toggle("drop-before", !after);
   });
-  tile.addEventListener("dragleave", () => tile.classList.remove("drop-before", "drop-after"));
-  tile.addEventListener("drop", async (e) => {
+  el.addEventListener("dragleave", () => el.classList.remove("drop-before", "drop-after"));
+  el.addEventListener("drop", async (e) => {
     if (!dnd) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const r = tile.getBoundingClientRect();
-    const after = e.clientX > r.left + r.width / 2;
-    const target = await chrome.bookmarks.get(node.id).then((x) => x[0]);
-    let index = target.index + (after ? 1 : 0);
-    await dropOnto(parentId, index);
+    e.preventDefault(); e.stopPropagation();
+    const r = el.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2;
+    const target = (await chrome.bookmarks.get(node.id))[0];
+    await dropOnto(parentId, target.index + (after ? 1 : 0));
   });
 }
-
 function wireGridDrop(grid, parentId) {
-  grid.addEventListener("dragover", (e) => {
-    if (!dnd) return;
-    e.preventDefault();
-    grid.classList.add("drop-into");
-  });
-  grid.addEventListener("dragleave", (e) => {
-    if (e.target === grid) grid.classList.remove("drop-into");
-  });
-  grid.addEventListener("drop", async (e) => {
-    if (!dnd) return;
-    e.preventDefault();
-    grid.classList.remove("drop-into");
-    // dropped on empty area → append to end
-    await dropOnto(parentId, null);
-  });
+  grid.addEventListener("dragover", (e) => { if (!dnd) return; e.preventDefault(); grid.classList.add("drop-into"); });
+  grid.addEventListener("dragleave", (e) => { if (e.target === grid) grid.classList.remove("drop-into"); });
+  grid.addEventListener("drop", async (e) => { if (!dnd) return; e.preventDefault(); grid.classList.remove("drop-into"); await dropOnto(parentId, null); });
 }
-
 async function dropOnto(parentId, index) {
   if (!dnd) return;
   if (dnd.kind === "live") {
-    // promote a live tab → create bookmark
     const tab = liveTabs.find((t) => t.id === dnd.tabId);
     if (tab && tab.url) await createAnchor(parentId, tab.title, tab.url, index);
   } else if (dnd.kind === "anchor") {
-    // move/reorder bookmark; account for index shift within same parent
     const node = (await chrome.bookmarks.get(dnd.id))[0];
     let dest = index;
     if (dest != null && node.parentId === parentId && node.index < dest) dest -= 1;
@@ -459,97 +409,143 @@ async function dropOnto(parentId, index) {
   dnd = null;
 }
 
-/* ---------- live ---------- */
-function litKey(url) {
-  try { const u = new URL(url); return u.origin + u.pathname; } catch { return url || ""; }
-}
-async function currentlyOpenUrls() {
-  const tabs = await chrome.tabs.query({});
-  return new Set(tabs.filter((t) => t.url).map((t) => litKey(t.url)));
-}
-
+/* ============================================================
+   LIVE  — vertical tabs + groups + split-view detection
+   ============================================================ */
 async function renderLive() {
-  const ul = $("#liveList");
+  const list = $("#liveList");
+  const win = await chrome.windows.getCurrent();
   liveTabs = await chrome.tabs.query({ currentWindow: true });
-  $("#liveCount").textContent = liveTabs.length ? String(liveTabs.length) : "";
-  ul.innerHTML = "";
-  if (!liveTabs.length) {
-    ul.innerHTML = `<li class="empty">開いているタブはありません</li>`;
-    return;
-  }
-
-  // which live tabs correspond to an anchor anywhere in the bar tree
-  const anchorUrls = await allAnchorKeys();
-
   liveTabs.sort((a, b) => a.index - b.index);
-  liveTabs.forEach((t) => {
-    const docked = t.url && anchorUrls.has(litKey(t.url));
-    const li = document.createElement("li");
-    li.className = "trow" + (t.active ? " active" : "") + (docked ? " docked" : "");
-    li.draggable = true;
-    li.dataset.tabId = String(t.id);
+  $("#liveCount").textContent = liveTabs.length ? String(liveTabs.length) : "";
+  list.innerHTML = "";
+  if (!liveTabs.length) { list.innerHTML = `<div class="empty">開いているタブはありません</div>`; return; }
 
-    const img = document.createElement("img");
-    img.className = "fav";
-    img.src = t.favIconUrl || faviconUrl(t.url || "");
-    img.alt = "";
-    img.addEventListener("error", () => { img.src = faviconUrl(t.url || ""); }, { once: true });
+  let groups = [];
+  if (chrome.tabGroups) { try { groups = await chrome.tabGroups.query({ windowId: win.id }); } catch { /* */ } }
+  const gmap = new Map(groups.map((g) => [g.id, g]));
+  const gcount = {};
+  liveTabs.forEach((t) => { if (t.groupId != null && t.groupId !== NONE) gcount[t.groupId] = (gcount[t.groupId] || 0) + 1; });
+  const splitCount = {};
+  liveTabs.forEach((t) => { const s = t.splitViewId; if (s != null && s !== splitNone()) splitCount[s] = (splitCount[s] || 0) + 1; });
+  const anchorKeys = await allAnchorKeys();
 
-    const title = document.createElement("span");
-    title.className = "ttitle";
-    title.textContent = t.title || hostOf(t.url || "");
-    title.title = t.url || "";
-
-    const moored = document.createElement("span");
-    moored.className = "moored";
-    moored.title = "この URL は錨として登録済み";
-    moored.textContent = "⚓";
-
-    const pin = document.createElement("button");
-    pin.className = "act pin";
-    pin.title = "錨に追加（このスペースへ）";
-    pin.textContent = "⚓";
-    pin.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      const space = await activeSpace();
-      if (t.url) await createAnchor(folderIdOf(space), t.title, t.url);
-    });
-
-    const close = document.createElement("button");
-    close.className = "act close";
-    close.title = "タブを閉じる";
-    close.textContent = "×";
-    close.addEventListener("click", (e) => { e.stopPropagation(); chrome.tabs.remove(t.id); });
-
-    li.append(img, title, moored, pin, close);
-    li.addEventListener("click", () => chrome.tabs.update(t.id, { active: true }));
-
-    // drag to promote
-    li.addEventListener("dragstart", (e) => {
-      dnd = { kind: "live", tabId: t.id };
-      li.classList.add("dragging");
-      e.dataTransfer.effectAllowed = "copy";
-    });
-    li.addEventListener("dragend", () => {
-      li.classList.remove("dragging");
-      document.querySelectorAll(".grid").forEach((g) => g.classList.remove("drop-into"));
-      dnd = null;
-    });
-
-    ul.appendChild(li);
-  });
+  const seen = new Set();
+  for (const t of liveTabs) {
+    const gid = t.groupId;
+    const grouped = gid != null && gid !== NONE;
+    const g = grouped ? gmap.get(gid) : null;
+    if (grouped && !seen.has(gid)) { seen.add(gid); list.appendChild(buildGroupHeader(g, gid, gcount[gid] || 0)); }
+    if (g && g.collapsed) continue;
+    list.appendChild(buildTabRow(t, !!grouped, g, anchorKeys, splitCount));
+  }
 }
 
-async function allAnchorKeys() {
-  // gather every bookmark url under the bar (anchors across all spaces/sections)
-  const sub = await chrome.bookmarks.getSubTree(barId);
-  const keys = new Set();
-  const walk = (n) => {
-    if (n.url) keys.add(litKey(n.url));
-    (n.children || []).forEach(walk);
-  };
-  (sub[0].children || []).forEach(walk);
-  return keys;
+function buildGroupHeader(g, gid, count) {
+  const color = g && g.color ? (GROUP_COLORS[g.color] || "#9aa0a6") : "#9aa0a6";
+  const collapsed = g ? g.collapsed : false;
+  const head = document.createElement("div");
+  head.className = "group-head" + (collapsed ? " collapsed" : "");
+  head.style.setProperty("--g-color", color);
+  head.dataset.gid = String(gid);
+
+  const caret = document.createElement("span"); caret.className = "g-caret"; caret.textContent = "▾";
+  const dot = document.createElement("button"); dot.className = "g-dot"; dot.title = "グループの色を変更";
+  const name = document.createElement("span"); name.className = "g-name"; name.textContent = (g && g.title) || "グループ";
+  name.title = "ダブルクリックで名前を変更";
+  const cnt = document.createElement("span"); cnt.className = "g-count"; cnt.textContent = String(count);
+  const ung = document.createElement("button"); ung.className = "g-ungroup"; ung.textContent = "⤴"; ung.title = "グループを解除";
+
+  head.append(caret, dot, name, cnt, ung);
+
+  head.addEventListener("click", async (e) => {
+    if (e.target === dot || e.target === ung || e.target === name) return;
+    if (chrome.tabGroups && g) await chrome.tabGroups.update(gid, { collapsed: !collapsed });
+  });
+  dot.addEventListener("click", (e) => { e.stopPropagation(); openGroupColorPop(gid, dot); });
+  name.addEventListener("dblclick", async (e) => {
+    e.stopPropagation();
+    const cur = (g && g.title) || "";
+    const next = prompt("グループ名", cur);
+    if (next != null && chrome.tabGroups) await chrome.tabGroups.update(gid, { title: next });
+  });
+  ung.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const ids = liveTabs.filter((t) => t.groupId === gid).map((t) => t.id);
+    if (ids.length) await chrome.tabs.ungroup(ids);
+  });
+
+  // accept a tab dropped onto the header → join this group
+  head.addEventListener("dragover", (e) => { if (dnd && dnd.kind === "live") { e.preventDefault(); head.classList.add("drop-join"); } });
+  head.addEventListener("dragleave", () => head.classList.remove("drop-join"));
+  head.addEventListener("drop", async (e) => {
+    if (!dnd || dnd.kind !== "live") return;
+    e.preventDefault(); head.classList.remove("drop-join");
+    const tabId = dnd.tabId; dnd = null;
+    await chrome.tabs.group({ groupId: gid, tabIds: [tabId] });
+  });
+  return head;
+}
+
+function buildTabRow(t, grouped, g, anchorKeys, splitCount) {
+  const docked = t.url && anchorKeys.has(litKey(t.url));
+  const inSplit = t.splitViewId != null && t.splitViewId !== splitNone() && (splitCount[t.splitViewId] || 0) >= 2;
+  const row = document.createElement("div");
+  row.className = "trow" + (t.active ? " active" : "") + (docked ? " docked" : "") + (grouped ? " grouped" : "");
+  row.draggable = true; row.dataset.tabId = String(t.id);
+  if (grouped && g) row.style.setProperty("--g-color", GROUP_COLORS[g.color] || "#9aa0a6");
+
+  const img = document.createElement("img"); img.className = "fav"; img.src = t.favIconUrl || faviconUrl(t.url || ""); img.alt = "";
+  img.addEventListener("error", () => { img.src = faviconUrl(t.url || ""); }, { once: true });
+  const title = document.createElement("span"); title.className = "ttitle"; title.textContent = t.title || hostOf(t.url || ""); title.title = t.url || "";
+
+  const split = document.createElement("span"); split.className = "split-badge"; split.textContent = "⊟";
+  split.title = "分割ビュー（作成/解除はブラウザ操作）"; if (!inSplit) split.style.display = "none";
+  const moored = document.createElement("span"); moored.className = "moored"; moored.textContent = "⚓"; moored.title = "錨として登録済み";
+
+  const grp = document.createElement("button"); grp.className = "act grp";
+  grp.textContent = grouped ? "⤴" : "⊕"; grp.title = grouped ? "グループから外す" : "新規グループ化";
+  grp.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (grouped) await chrome.tabs.ungroup([t.id]);
+    else await chrome.tabs.group({ tabIds: [t.id] });
+  });
+  const pin = document.createElement("button"); pin.className = "act pin"; pin.textContent = "⚓"; pin.title = "錨に追加（このスペースへ）";
+  pin.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const space = await activeSpace();
+    const parent = space ? space.id : barId;
+    if (t.url) await createAnchor(parent, t.title, t.url);
+  });
+  const close = document.createElement("button"); close.className = "act close"; close.textContent = "×"; close.title = "タブを閉じる";
+  close.addEventListener("click", (e) => { e.stopPropagation(); chrome.tabs.remove(t.id); });
+
+  row.append(img, title, split, moored, grp, pin, close);
+  row.addEventListener("click", () => chrome.tabs.update(t.id, { active: true }));
+  row.addEventListener("dragstart", (e) => { dnd = { kind: "live", tabId: t.id }; row.classList.add("dragging"); e.dataTransfer.effectAllowed = "copyMove"; });
+  row.addEventListener("dragend", () => {
+    row.classList.remove("dragging");
+    document.querySelectorAll(".grid,.pins").forEach((g2) => g2.classList.remove("drop-into"));
+    document.querySelectorAll(".group-head").forEach((h) => h.classList.remove("drop-join"));
+    dnd = null;
+  });
+  return row;
+}
+
+/* ---------- group color popover ---------- */
+function openGroupColorPop(gid, anchorEl) {
+  const pop = $("#groupPop");
+  pop.innerHTML = "";
+  GROUP_COLOR_NAMES.forEach((nm) => {
+    const b = document.createElement("button");
+    b.className = "gc-swatch"; b.style.background = GROUP_COLORS[nm]; b.title = nm;
+    b.addEventListener("click", async () => { pop.classList.add("hidden"); if (chrome.tabGroups) await chrome.tabGroups.update(gid, { color: nm }); });
+    pop.appendChild(b);
+  });
+  const r = anchorEl.getBoundingClientRect();
+  pop.style.left = Math.min(r.left, window.innerWidth - 150) + "px";
+  pop.style.top = (r.bottom + 6) + "px";
+  pop.classList.remove("hidden");
 }
 
 /* ============================================================
@@ -560,14 +556,16 @@ async function openAnchorModal(mode, node) {
   $("#modalTitle").textContent = mode === "add" ? "錨を追加" : "錨を編集";
   $("#fTitle").value = node ? (node.title || "") : "";
   $("#fUrl").value = node ? (node.url || "") : "";
-  const sel = $("#fSpace");
-  sel.innerHTML = "";
+  const sel = $("#fSpace"); sel.innerHTML = "";
   const spaces = await getSpaces();
-  const cur = node ? node.parentId : folderIdOf(await activeSpace(spaces));
-  spaces.forEach((s) => {
+  const space = await activeSpace(spaces);
+  const cur = node ? node.parentId : (space ? space.id : barId);
+  // allow PINS (bar root) as a destination too
+  const opts = [{ id: barId, name: "PINS（バー直下）" }, ...spaces];
+  opts.forEach((s) => {
     const o = document.createElement("option");
-    o.value = folderIdOf(s); o.textContent = s.name;
-    if (folderIdOf(s) === cur) o.selected = true;
+    o.value = s.id; o.textContent = s.name;
+    if (s.id === cur) o.selected = true;
     sel.appendChild(o);
   });
   $("#mDelete").style.display = mode === "edit" ? "" : "none";
@@ -586,27 +584,20 @@ async function saveAnchorModal() {
     await chrome.bookmarks.update(modalCtx.id, { title: title || hostOf(url), url });
     const node = (await chrome.bookmarks.get(modalCtx.id))[0];
     if (node.parentId !== parentId) await chrome.bookmarks.move(modalCtx.id, { parentId });
-  } else {
-    await createAnchor(parentId, title, url);
-  }
+  } else { await createAnchor(parentId, title, url); }
   closeAnchorModal();
 }
 
 async function openSpaceModal(mode, space, idx) {
-  spaceCtx = { mode, id: space ? space.id : null, color: space ? colorFor(space.id, idx || 0) : SWATCHES[0] };
+  spaceCtx = { mode, id: space ? space.id : null, color: space ? colorFor(space.id, idx) : SWATCHES[0] };
   $("#spaceModalTitle").textContent = mode === "add" ? "スペースを追加" : "スペースを編集";
   $("#sName").value = space ? space.name : "";
-  const sw = $("#sSwatches");
-  sw.innerHTML = "";
+  const sw = $("#sSwatches"); sw.innerHTML = "";
   SWATCHES.forEach((c) => {
     const b = document.createElement("button");
     b.className = "swatch" + (c === spaceCtx.color ? " sel" : "");
     b.style.background = c;
-    b.addEventListener("click", () => {
-      spaceCtx.color = c;
-      sw.querySelectorAll(".swatch").forEach((x) => x.classList.remove("sel"));
-      b.classList.add("sel");
-    });
+    b.addEventListener("click", () => { spaceCtx.color = c; sw.querySelectorAll(".swatch").forEach((x) => x.classList.remove("sel")); b.classList.add("sel"); });
     sw.appendChild(b);
   });
   $("#sDelete").style.display = mode === "edit" ? "" : "none";
@@ -618,7 +609,7 @@ async function saveSpaceModal() {
   if (!spaceCtx) return;
   const name = $("#sName").value.trim() || "スペース";
   if (spaceCtx.mode === "edit") {
-    if (spaceCtx.id !== BAR_SPACE) await chrome.bookmarks.update(spaceCtx.id, { title: name });
+    await chrome.bookmarks.update(spaceCtx.id, { title: name });
     meta.spaceColor[spaceCtx.id] = spaceCtx.color;
   } else {
     const f = await chrome.bookmarks.create({ parentId: barId, title: name });
@@ -629,14 +620,13 @@ async function saveSpaceModal() {
   closeSpaceModal();
 }
 async function deleteSpace() {
-  if (!spaceCtx || spaceCtx.id === BAR_SPACE) return;
+  if (!spaceCtx || !spaceCtx.id) return;
   const node = (await chrome.bookmarks.getSubTree(spaceCtx.id))[0];
   const count = (node.children || []).filter(isAnchor).length;
-  const name = node.title || "";
-  if (!confirm(`スペース「${name}」とその中の錨 ${count} 件（ブックマーク）を削除します。よろしいですか?`)) return;
+  if (!confirm(`スペース「${node.title || ""}」とその中の錨 ${count} 件（ブックマーク）を削除します。よろしいですか?`)) return;
   await chrome.bookmarks.removeTree(spaceCtx.id);
   delete meta.spaceColor[spaceCtx.id];
-  if (meta.activeSpaceId === spaceCtx.id) meta.activeSpaceId = BAR_SPACE;
+  if (meta.activeSpaceId === spaceCtx.id) meta.activeSpaceId = null;
   await saveMeta();
   closeSpaceModal();
 }
@@ -645,10 +635,7 @@ async function deleteSpace() {
    WIRING / BOOT
    ============================================================ */
 let renderTimer = null;
-function scheduleRender() {
-  clearTimeout(renderTimer);
-  renderTimer = setTimeout(renderAll, 100);
-}
+function scheduleRender() { clearTimeout(renderTimer); renderTimer = setTimeout(renderAll, 100); }
 
 function wireStaticUi() {
   $("#editToggle").addEventListener("click", () => {
@@ -656,10 +643,7 @@ function wireStaticUi() {
     document.querySelector(".app").classList.toggle("editing", editing);
     $("#editToggle").textContent = editing ? "完了" : "編集";
   });
-  $("#densityToggle").addEventListener("click", () => {
-    meta.density = meta.density === "compact" ? "cozy" : "compact";
-    saveMeta(); renderAnchored();
-  });
+  $("#densityToggle").addEventListener("click", () => { meta.density = meta.density === "compact" ? "cozy" : "compact"; saveMeta(); renderAnchored(); });
   $("#filter").addEventListener("input", (e) => { filterText = norm(e.target.value); renderAnchored(); });
   $("#spaceOpenAll").addEventListener("click", openAllInActiveSpace);
   $("#tidyBtn").addEventListener("click", tidyLiveTabs);
@@ -667,11 +651,7 @@ function wireStaticUi() {
   $("#mCancel").addEventListener("click", closeAnchorModal);
   $("#mSave").addEventListener("click", saveAnchorModal);
   $("#mDelete").addEventListener("click", async () => {
-    if (modalCtx && modalCtx.id) {
-      const node = (await chrome.bookmarks.get(modalCtx.id))[0];
-      closeAnchorModal();
-      await removeAnchorWithUndo(node);
-    }
+    if (modalCtx && modalCtx.id) { const node = (await chrome.bookmarks.get(modalCtx.id))[0]; closeAnchorModal(); await removeAnchorWithUndo(node); }
   });
   $("#sCancel").addEventListener("click", closeSpaceModal);
   $("#sSave").addEventListener("click", saveSpaceModal);
@@ -680,14 +660,14 @@ function wireStaticUi() {
 
   $("#overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") closeAnchorModal(); });
   $("#spaceOverlay").addEventListener("click", (e) => { if (e.target.id === "spaceOverlay") closeSpaceModal(); });
+  document.addEventListener("click", (e) => { if (!e.target.closest("#groupPop") && !e.target.classList.contains("g-dot")) $("#groupPop").classList.add("hidden"); });
 
   document.addEventListener("keydown", async (e) => {
-    if (e.key === "Escape") { closeAnchorModal(); closeSpaceModal(); hideUndo(); return; }
+    if (e.key === "Escape") { closeAnchorModal(); closeSpaceModal(); hideUndo(); $("#groupPop").classList.add("hidden"); return; }
     if (e.key === "Enter") {
       if (!$("#overlay").classList.contains("hidden")) { saveAnchorModal(); return; }
       if (!$("#spaceOverlay").classList.contains("hidden")) { saveSpaceModal(); return; }
     }
-    // number keys 1–9 switch spaces (when not typing)
     const typing = ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName);
     if (!typing && /^[1-9]$/.test(e.key)) {
       const spaces = await getSpaces();
@@ -696,11 +676,12 @@ function wireStaticUi() {
     }
   });
 
-  // react to external bookmark + tab changes
   ["onCreated", "onRemoved", "onChanged", "onMoved", "onChildrenReordered", "onImportEnded"]
     .forEach((ev) => { if (chrome.bookmarks[ev]) chrome.bookmarks[ev].addListener(scheduleRender); });
   ["onCreated", "onRemoved", "onUpdated", "onActivated", "onMoved", "onAttached", "onDetached"]
     .forEach((ev) => { if (chrome.tabs[ev]) chrome.tabs[ev].addListener(scheduleRender); });
+  if (chrome.tabGroups) ["onCreated", "onUpdated", "onRemoved", "onMoved"]
+    .forEach((ev) => { if (chrome.tabGroups[ev]) chrome.tabGroups[ev].addListener(scheduleRender); });
 }
 
 (async function init() {

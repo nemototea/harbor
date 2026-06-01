@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Harbor preview</title>
+  <link rel="stylesheet" href="../sidepanel.css" />
+  <style> html,body{width:380px;} </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><span class="mark"></span><span class="brand-name">HARBOR</span></div>
+      <div class="topbar-tools">
+        <div class="filter-wrap"><input id="filter" class="filter" type="text" placeholder="絞り込み" /></div>
+        <button id="densityToggle" class="icon-btn">⊟</button>
+        <button id="editToggle" class="icon-btn">編集</button>
+      </div>
+    </header>
+    <nav class="spaces" id="spaces"></nav>
+    <main class="content">
+      <section class="block block-pins" id="pinsBlock">
+        <div class="rail-head"><span class="rail-label">PINS</span><span class="count" id="pinCount"></span></div>
+        <div class="pins" id="pins"></div>
+      </section>
+      <section class="block block-anchored">
+        <div class="block-head">
+          <span class="tag tag-anchor">ANCHORED</span><span class="space-title" id="spaceTitle"></span>
+          <span class="count" id="anchorCount"></span><span class="spacer"></span>
+          <button id="spaceOpenAll" class="mini-btn">すべて開く</button>
+        </div>
+        <div class="anchored-scroll" id="anchoredScroll"></div>
+      </section>
+      <section class="block block-live">
+        <div class="block-head">
+          <span class="tag tag-live">LIVE</span><span class="count" id="liveCount"></span>
+          <span class="spacer"></span><button id="tidyBtn" class="mini-btn">片付け</button>
+        </div>
+        <div class="tablist" id="liveList"></div>
+      </section>
+    </main>
+    <footer class="footer"><span id="hint">クリックで開く · タブをグリッドへドラッグで係留 · 1–9 でスペース</span></footer>
+  </div>
+  <div class="group-pop hidden" id="groupPop"></div>
+  <div class="snackbar hidden" id="snackbar"><span id="snackMsg"></span><button id="snackUndo" class="snack-undo">元に戻す</button></div>
+  <div class="overlay hidden" id="overlay"><div class="modal"><h2 id="modalTitle"></h2>
+    <label>名前<input id="fTitle"/></label><label>URL<input id="fUrl"/></label><label>スペース<select id="fSpace"></select></label>
+    <div class="modal-actions"><button id="mDelete" class="btn btn-danger">削除</button><span class="spacer"></span>
+    <button id="mCancel" class="btn">キャンセル</button><button id="mSave" class="btn btn-primary">保存</button></div></div></div>
+  <div class="overlay hidden" id="spaceOverlay"><div class="modal"><h2 id="spaceModalTitle"></h2>
+    <label>名前<input id="sName"/></label><label>色<div class="swatches" id="sSwatches"></div></label>
+    <div class="modal-actions"><button id="sDelete" class="btn btn-danger">削除</button><span class="spacer"></span>
+    <button id="sCancel" class="btn">キャンセル</button><button id="sSave" class="btn btn-primary">保存</button></div></div></div>
+
+  <script>
+  /* ---- in-memory bookmark tree + chrome.* mock ---- */
+  const FAV = (d) => "https://www.google.com/s2/favicons?sz=64&domain=" + d;
+  const nodes = {};
+  function n(o){ nodes[o.id]=Object.assign({children:[]},o); return o.id; }
+  n({id:"0",children:["1","2"]});
+  n({id:"1",parentId:"0",index:0,folderType:"bookmarks-bar",title:"ブックマーク バー",
+     children:["p1","p2","p3","f1","f2"]});
+  n({id:"2",parentId:"0",index:1,title:"その他",children:[]});
+  // loose pins
+  n({id:"p1",parentId:"1",index:0,title:"GitHub",url:"https://github.com"});
+  n({id:"p2",parentId:"1",index:1,title:"Gmail",url:"https://mail.google.com"});
+  n({id:"p3",parentId:"1",index:2,title:"Calendar",url:"https://calendar.google.com"});
+  // space folders
+  n({id:"f1",parentId:"1",index:3,title:"クラウド",children:["a1","a2","a3","s1"]});
+  n({id:"a1",parentId:"f1",index:0,title:"AWS Console",url:"https://console.aws.amazon.com"});
+  n({id:"a2",parentId:"f1",index:1,title:"Google Cloud",url:"https://console.cloud.google.com"});
+  n({id:"a3",parentId:"f1",index:2,title:"Cloudflare",url:"https://dash.cloudflare.com"});
+  n({id:"s1",parentId:"f1",index:3,title:"監視",children:["m1","m2"]});
+  n({id:"m1",parentId:"s1",index:0,title:"Datadog",url:"https://app.datadoghq.com"});
+  n({id:"m2",parentId:"s1",index:1,title:"Grafana",url:"https://grafana.com"});
+  n({id:"f2",parentId:"1",index:4,title:"開発",children:["b1","b2"]});
+  n({id:"b1",parentId:"f2",index:0,title:"GitHub Docs",url:"https://docs.github.com"});
+  n({id:"b2",parentId:"f2",index:1,title:"Jira",url:"https://jira.atlassian.com"});
+
+  const sub = (id)=>{ const x=nodes[id]; return Object.assign({},x,{children:(x.children||[]).map(sub)}); };
+  const kids = (id)=> (nodes[id].children||[]).map(c=>nodes[c]).sort((a,b)=>a.index-b.index);
+
+  const tabs = [
+    {id:1,index:0,title:"Harbor — GitHub",url:"https://github.com/nemototea/harbor",favIconUrl:FAV("github.com"),active:true,groupId:-1},
+    {id:2,index:1,title:"AWS Console",url:"https://console.aws.amazon.com",favIconUrl:FAV("amazon.com"),groupId:-1},
+    {id:3,index:2,title:"Stack Overflow",url:"https://stackoverflow.com/q/123",favIconUrl:FAV("stackoverflow.com"),groupId:100,splitViewId:7},
+    {id:4,index:3,title:"MDN — Bookmarks API",url:"https://developer.mozilla.org",favIconUrl:FAV("mozilla.org"),groupId:100,splitViewId:7},
+    {id:5,index:4,title:"chrome.tabGroups | Chrome",url:"https://developer.chrome.com/docs",favIconUrl:FAV("chrome.com"),groupId:100},
+    {id:6,index:5,title:"Gmail — 受信トレイ",url:"https://mail.google.com",favIconUrl:FAV("google.com"),groupId:-1},
+    {id:7,index:6,title:"Figma — Harbor UI",url:"https://figma.com/file/x",favIconUrl:FAV("figma.com"),groupId:-1},
+  ];
+  const groups = [{id:100,title:"調査",color:"blue",collapsed:false,windowId:1}];
+  const noop=()=>{}; const L={addListener:noop};
+  window.chrome = {
+    runtime:{ getURL:(p)=>"https://www.google.com"+p },
+    storage:{ local:{ get:async()=>({}), set:async()=>{} } },
+    windows:{ getCurrent:async()=>({id:1}), update:async()=>{} },
+    bookmarks:{
+      getTree:async()=>[sub("0")], getChildren:async(id)=>kids(id), getSubTree:async(id)=>[sub(id)],
+      get:async(id)=>[nodes[id]], create:async()=>({id:"new"}), move:async()=>{}, remove:async()=>{},
+      removeTree:async()=>{}, update:async()=>{},
+      onCreated:L,onRemoved:L,onChanged:L,onMoved:L,onChildrenReordered:L,onImportEnded:L,
+    },
+    tabs:{
+      query:async(q)=> (q&&q.currentWindow)?tabs.slice():tabs.slice(),
+      update:async()=>{}, create:async()=>({id:99}), remove:async()=>{}, group:async()=>100, ungroup:async()=>{},
+      TAB_GROUP_ID_NONE:-1, SPLIT_VIEW_ID_NONE:-1,
+      onCreated:L,onRemoved:L,onUpdated:L,onActivated:L,onMoved:L,onAttached:L,onDetached:L,
+    },
+    tabGroups:{ query:async()=>groups.slice(), update:async()=>{}, onCreated:L,onUpdated:L,onRemoved:L,onMoved:L },
+  };
+  </script>
+  <script src="../sidepanel.js"></script>
+</body>
+</html>

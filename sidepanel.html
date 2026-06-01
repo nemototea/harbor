@@ -25,16 +25,24 @@
     <nav class="spaces" id="spaces" aria-label="スペース"></nav>
 
     <main class="content">
+      <!-- pinned bar bookmarks (loose, always visible) -->
+      <section class="block block-pins" id="pinsBlock">
+        <div class="rail-head">
+          <span class="rail-label">PINS</span>
+          <span class="count" id="pinCount"></span>
+        </div>
+        <div class="pins" id="pins"></div>
+      </section>
+
       <section class="block block-anchored">
         <div class="block-head">
           <span class="tag tag-anchor">ANCHORED</span>
+          <span class="space-title" id="spaceTitle"></span>
           <span class="count" id="anchorCount"></span>
           <span class="spacer"></span>
           <button id="spaceOpenAll" class="mini-btn" title="このスペースの錨をすべて開く">すべて開く</button>
         </div>
-        <div class="anchored-scroll" id="anchoredScroll">
-          <!-- main grid + sections injected here -->
-        </div>
+        <div class="anchored-scroll" id="anchoredScroll"></div>
       </section>
 
       <section class="block block-live">
@@ -42,16 +50,19 @@
           <span class="tag tag-live">LIVE</span>
           <span class="count" id="liveCount"></span>
           <span class="spacer"></span>
-          <button id="tidyBtn" class="mini-btn" title="錨になっていないタブを閉じる">片付け</button>
+          <button id="tidyBtn" class="mini-btn" title="どこにも保存していないタブを閉じる">片付け</button>
         </div>
-        <ul class="tablist" id="liveList"></ul>
+        <div class="tablist" id="liveList"></div>
       </section>
     </main>
 
     <footer class="footer">
-      <span id="hint">クリックで開く · タブをグリッドへドラッグで係留 · 1–9 でスペース切替</span>
+      <span id="hint">クリックで開く · タブをグリッドへドラッグで係留 · グループヘッダへドラッグで仲間入り · 1–9 でスペース</span>
     </footer>
   </div>
+
+  <!-- group color popover -->
+  <div class="group-pop hidden" id="groupPop"></div>
 
   <!-- undo snackbar -->
   <div class="snackbar hidden" id="snackbar">
