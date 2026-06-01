@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="Harbor — Anchor-based workspace for Chrome" width="100%">
+</p>
+
 # Harbor
 
 戻り先を「錨(Anchor)」としてグリッド管理する Chrome サイドパネル拡張。
