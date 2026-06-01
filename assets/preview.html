@@ -101,7 +101,7 @@
       onCreated:L,onRemoved:L,onChanged:L,onMoved:L,onChildrenReordered:L,onImportEnded:L,
     },
     tabs:{
-      query:async(q)=> (q&&q.currentWindow)?tabs.slice():tabs.slice(),
+      query:async()=> tabs.map(t=>Object.assign({windowId:1},t)),
       update:async()=>{}, create:async()=>({id:99}), remove:async()=>{}, group:async()=>100, ungroup:async()=>{},
       TAB_GROUP_ID_NONE:-1, SPLIT_VIEW_ID_NONE:-1,
       onCreated:L,onRemoved:L,onUpdated:L,onActivated:L,onMoved:L,onAttached:L,onDetached:L,

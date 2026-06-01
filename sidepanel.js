@@ -179,12 +179,14 @@ async function runUndo() { if (undoCtx) { const fn = undoCtx.fn; hideUndo(); awa
    RENDER
    ============================================================ */
 async function renderAll() {
-  const spaces = await getSpaces();
-  if (spaces.length && !spaces.find((s) => s.id === meta.activeSpaceId)) meta.activeSpaceId = spaces[0].id;
-  renderSpaces(spaces);
-  await renderPins();
-  await renderAnchored(spaces);
-  await renderLive();
+  try {
+    const spaces = await getSpaces();
+    if (spaces.length && !spaces.find((s) => s.id === meta.activeSpaceId)) meta.activeSpaceId = spaces[0].id;
+    renderSpaces(spaces);
+    await renderPins();
+    await renderAnchored(spaces);
+    await renderLive();
+  } catch (err) { console.warn("Harbor: render failed", err); }
 }
 
 /* ---------- spaces ---------- */
@@ -416,8 +418,12 @@ function wireAnchorDrag(el, node, parentId) {
     if (!dnd) return;
     e.preventDefault(); e.stopPropagation();
     const r = el.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2;
-    const target = (await chrome.bookmarks.get(node.id))[0];
-    await dropOnto(parentId, target.index + (after ? 1 : 0));
+    let index = null; // fall back to append if the target bookmark is gone
+    try {
+      const target = (await chrome.bookmarks.get(node.id))[0];
+      if (target) index = target.index + (after ? 1 : 0);
+    } catch { /* target removed — append */ }
+    await dropOnto(parentId, index);
   });
 }
 function wireGridDrop(grid, parentId) {
@@ -431,15 +437,18 @@ async function dropOnto(parentId, index) {
   const payload = dnd;
   dnd = null;
   if (!payload) return;
-  if (payload.kind === "live") {
-    const tab = liveTabs.find((t) => t.id === payload.tabId);
-    if (tab && tab.url) await createAnchor(parentId, tab.title, tab.url, index);
-  } else if (payload.kind === "anchor") {
-    const node = (await chrome.bookmarks.get(payload.id))[0];
-    let dest = index;
-    if (dest != null && node.parentId === parentId && node.index < dest) dest -= 1;
-    await chrome.bookmarks.move(payload.id, dest == null ? { parentId } : { parentId, index: dest });
-  }
+  try {
+    if (payload.kind === "live") {
+      const tab = liveTabs.find((t) => t.id === payload.tabId);
+      if (tab && tab.url) await createAnchor(parentId, tab.title, tab.url, index);
+    } else if (payload.kind === "anchor") {
+      const node = (await chrome.bookmarks.get(payload.id))[0];
+      if (!node) return;
+      let dest = index;
+      if (dest != null && node.parentId === parentId && node.index < dest) dest -= 1;
+      await chrome.bookmarks.move(payload.id, dest == null ? { parentId } : { parentId, index: dest });
+    }
+  } catch (err) { console.warn("Harbor: drop failed", err); }
 }
 
 /* ============================================================
@@ -447,15 +456,18 @@ async function dropOnto(parentId, index) {
    ============================================================ */
 async function renderLive() {
   const list = $("#liveList");
-  const win = await chrome.windows.getCurrent();
   liveTabs = await chrome.tabs.query({ currentWindow: true });
   liveTabs.sort((a, b) => a.index - b.index);
   $("#liveCount").textContent = liveTabs.length ? String(liveTabs.length) : "";
   list.innerHTML = "";
   if (!liveTabs.length) { list.innerHTML = `<div class="empty">開いているタブはありません</div>`; return; }
 
+  // derive window id from the tabs we already have (avoids a null windows.getCurrent())
+  const winId = liveTabs[0].windowId;
   let groups = [];
-  if (chrome.tabGroups) { try { groups = await chrome.tabGroups.query({ windowId: win.id }); } catch { /* */ } }
+  if (chrome.tabGroups && winId != null) {
+    try { groups = await chrome.tabGroups.query({ windowId: winId }); } catch { /* */ }
+  }
   const gmap = new Map(groups.map((g) => [g.id, g]));
   const gcount = {};
   liveTabs.forEach((t) => { if (t.groupId != null && t.groupId !== NONE) gcount[t.groupId] = (gcount[t.groupId] || 0) + 1; });
