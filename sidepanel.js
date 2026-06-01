@@ -280,7 +280,6 @@ async function renderPins() {
   const pins = await getPins();
   $("#pinCount").textContent = pins.length ? String(pins.length) : "";
   wrap.innerHTML = "";
-  wirePinsDrop(wrap);
 
   pins.forEach((p) => {
     const chip = document.createElement("div");
@@ -427,17 +426,20 @@ function wireGridDrop(grid, parentId) {
   grid.addEventListener("drop", async (e) => { if (!dnd) return; e.preventDefault(); grid.classList.remove("drop-into"); await dropOnto(parentId, null); });
 }
 async function dropOnto(parentId, index) {
-  if (!dnd) return;
-  if (dnd.kind === "live") {
-    const tab = liveTabs.find((t) => t.id === dnd.tabId);
+  // capture + clear synchronously, BEFORE any await, so a single drop can't
+  // be processed twice (and stray listeners can't multiply the create)
+  const payload = dnd;
+  dnd = null;
+  if (!payload) return;
+  if (payload.kind === "live") {
+    const tab = liveTabs.find((t) => t.id === payload.tabId);
     if (tab && tab.url) await createAnchor(parentId, tab.title, tab.url, index);
-  } else if (dnd.kind === "anchor") {
-    const node = (await chrome.bookmarks.get(dnd.id))[0];
+  } else if (payload.kind === "anchor") {
+    const node = (await chrome.bookmarks.get(payload.id))[0];
     let dest = index;
     if (dest != null && node.parentId === parentId && node.index < dest) dest -= 1;
-    await chrome.bookmarks.move(dnd.id, dest == null ? { parentId } : { parentId, index: dest });
+    await chrome.bookmarks.move(payload.id, dest == null ? { parentId } : { parentId, index: dest });
   }
-  dnd = null;
 }
 
 /* ============================================================
@@ -716,6 +718,7 @@ function wireStaticUi() {
     .forEach((ev) => { if (chrome.tabGroups[ev]) chrome.tabGroups[ev].addListener(scheduleRender); });
 
   wireSpaceSwipe();
+  wirePinsDrop($("#pins")); // wire the persistent PINS container ONCE (not per render)
 }
 
 (async function init() {
