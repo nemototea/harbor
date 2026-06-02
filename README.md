@@ -90,3 +90,20 @@ python3 -m http.server 4178   # → http://localhost:4178/assets/preview.html
 - `bookmarks` 錨/スペースの実体（ブックマーク）の読み書き
 
 外部通信は行いません。すべてローカル。
+
+## ライセンス
+
+Copyright (C) 2026 nemototea
+
+本プログラムはフリーソフトウェアです。Free Software Foundation が公開する
+GNU General Public License バージョン3（またはそれ以降の任意のバージョン）の
+条件の下で、再頒布および改変ができます。詳細は [LICENSE](LICENSE) を参照してください。
+
+> Harbor is free software: you can redistribute it and/or modify it under the
+> terms of the GNU General Public License as published by the Free Software
+> Foundation, either version 3 of the License, or (at your option) any later
+> version. This program is distributed WITHOUT ANY WARRANTY. See the
+> [LICENSE](LICENSE) file for details.
+
+派生物・再頒布物も同じ GPL-3.0 の下でソースコードを公開する必要があります
+（クローズドソース化や、ソース非公開のままの再配布はできません）。
