@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    <defs>
+      <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ffe0a3"/><stop offset=".5" stop-color="#ffc24d"/><stop offset="1" stop-color="#f5a623"/>
+      </linearGradient>
+      <radialGradient id="sheen" cx="0.34" cy="0.26" r="0.8">
+        <stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/><stop offset="0.45" stop-color="#ffffff" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <circle cx="64" cy="64" r="60" fill="url(#amber)"/>
+    <circle cx="64" cy="64" r="60" fill="url(#sheen)"/>
+    <circle cx="64" cy="64" r="59" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.5"/>
+    <g fill="none" stroke="#23160a" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="64" cy="33" r="9.5"/>
+      <line x1="64" y1="42.5" x2="64" y2="99"/>
+      <line x1="41" y1="53" x2="87" y2="53"/>
+      <path d="M28 69 C 28 92, 44 101, 64 101 C 84 101, 100 92, 100 69"/>
+    </g>
+    <g fill="#23160a">
+      <path d="M28 71 L15 62 L34 55 Z"/>
+      <path d="M100 71 L113 62 L94 55 Z"/>
+    </g>
+    <circle cx="64" cy="101" r="5.5" fill="#23160a"/></svg>

@@ -52,8 +52,64 @@
     <button id="sCancel" class="btn">キャンセル</button><button id="sSave" class="btn btn-primary">保存</button></div></div></div>
 
   <script>
+  /* ---- offline dummy favicons (no network; for previews & screenshots) ---- */
+  const BRAND = {
+    "github.com":["#3a3f46","#24292e","G"], "docs.github.com":["#3a3f46","#24292e","G"],
+    "console.aws.amazon.com":["#ff9900","#ec7211","a"], "amazon.com":["#ff9900","#ec7211","a"],
+    "console.cloud.google.com":["#4285f4","#1a73e8","G"], "google.com":["#4285f4","#1a73e8","G"],
+    "dash.cloudflare.com":["#f6821f","#faad3f","C"], "cloudflare.com":["#f6821f","#faad3f","C"],
+    "app.datadoghq.com":["#774aa4","#632ca6","D"], "grafana.com":["#f46800","#e87a00","G"],
+    "jira.atlassian.com":["#2684ff","#0052cc","J"], "atlassian.com":["#2684ff","#0052cc","J"],
+    "developer.mozilla.org":["#4d4dff","#1b1b1b","M"], "developer.chrome.com":["#4285f4","#34a853","C"],
+    "stackoverflow.com":["#f7a04c","#f48024","S"], "mail.google.com":["#ea4335","#c5221f","M"],
+    "calendar.google.com":["#4285f4","#1a73e8","C"], "figma.com":["#a259ff","#f24e1e","F"],
+  };
+  function hostOf(u){ try{ return new URL(u).hostname.replace(/^www\./,""); }catch{ return (u||"").replace(/^www\./,""); } }
+  function favData(host){
+    host = (host||"").replace(/^www\./,"");
+    let c1,c2,ltr;
+    if (BRAND[host]) { [c1,c2,ltr] = BRAND[host]; }
+    else {
+      let h=0; for (const ch of host) h=(h*31+ch.charCodeAt(0))>>>0;
+      const hue=h%360; c1=`hsl(${hue} 58% 54%)`; c2=`hsl(${(hue+26)%360} 62% 42%)`;
+      ltr=(host.replace(/^[^a-z0-9]*/i,"")[0]||"•").toUpperCase();
+    }
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'>`
+      + `<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>`
+      + `<stop offset='0' stop-color='${c1}'/><stop offset='1' stop-color='${c2}'/></linearGradient></defs>`
+      + `<rect width='64' height='64' rx='15' fill='url(#g)'/>`
+      + `<text x='32' y='45' font-family='-apple-system,Segoe UI,Roboto,sans-serif' font-size='36' font-weight='700' fill='#fff' fill-opacity='.95' text-anchor='middle'>${ltr}</text>`
+      + `</svg>`;
+    return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+  }
+  /* derive a host from whatever favicon URL sidepanel.js generated, then swap to a data URI */
+  function hostFromFavSrc(src){
+    if (!src || src.startsWith("data:")) return null;
+    try { const u=new URL(src, location.href);
+      const pg=u.searchParams.get("pageUrl"); if (pg) return hostOf(pg);
+      const dm=u.searchParams.get("domain");  if (dm) return dm.replace(/^www\./,"");
+    } catch {}
+    return null;
+  }
+  function fixFav(img){
+    if (img.dataset.dummy) return;
+    const host = hostFromFavSrc(img.getAttribute("src"));
+    if (host){ img.dataset.dummy="1"; img.src = favData(host); }
+  }
+  const FAV = (d) => favData(d);   // LIVE tabs use this directly
+  /* rewrite bookmark/tab favicons as they are added, plus an error-time fallback */
+  new MutationObserver(muts=>{
+    for (const m of muts) for (const node of m.addedNodes){
+      if (node.nodeType!==1) continue;
+      if (node.tagName==="IMG" && /fav/.test(node.className)) fixFav(node);
+      node.querySelectorAll && node.querySelectorAll("img.fav,img.pin-fav").forEach(fixFav);
+    }
+  }).observe(document.documentElement,{childList:true,subtree:true});
+  document.addEventListener("error", e=>{ const t=e.target;
+    if (t && t.tagName==="IMG" && /fav/.test(t.className)) fixFav(t);
+  }, true);
+
   /* ---- in-memory bookmark tree + chrome.* mock ---- */
-  const FAV = (d) => "https://www.google.com/s2/favicons?sz=64&domain=" + d;
   const nodes = {};
   function n(o){ nodes[o.id]=Object.assign({children:[]},o); return o.id; }
   n({id:"0",children:["1","2"]});

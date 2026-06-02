@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Harbor — Anchor-based workspace for Chrome" width="100%">
+  <img src="assets/banner-ui.png" alt="Harbor — Anchor-based workspace for Chrome" width="100%">
 </p>
 
 # Harbor
@@ -10,6 +10,14 @@
 錨の実体は **Chrome のブックマーク** です。だからインポート/エクスポート/端末間同期はブラウザ標準の仕組みにそのまま乗ります。Harbor 独自に持つのは色などの薄いメタ情報だけ。
 
 見た目は **「Liquid Harbour」**——2026年的なスキューモーフィズム（Liquid Glass）。重厚なテクスチャや光沢ベベルではなく、**すりガラスの半透明・実時間ブラー・鏡面ハイライト**と、港の夜の水面に滲む琥珀/ティールの光で奥行きを出します。すべてCSSのみ、外部通信なし。
+
+## スクリーンショット
+
+<p align="center">
+  <img src="assets/screenshot-panel.png" alt="Harbor サイドパネル（PINS / ANCHORED / LIVE）" width="380">
+</p>
+
+> 掲載画像はすべて `assets/preview.html`（`chrome.*` をモックしたダミーデータ）から撮影しています。実際のブックマークやタブは含まれません。Chrome Web Store 掲載用の素材は [`store/`](store/) に置いています（1280×800 スクリーンショット・440×280 小タイル・1400×560 マーキー）。
 
 - **PINS** … ブックマークバー**直下の裸ブックマーク**。スペースとは別に、上部の真鍮レールに常時並ぶグローバルなお気に入り。タブをドラッグでピン留め。
 - **ANCHORED** … 選択中スペース（フォルダ）のブックマークを真鍮メダリオンのグリッドで表示。クリックで「既存タブにフォーカス、無ければ開く」。今開いているURLの錨は点灯。サブフォルダは折りたたみセクション。
