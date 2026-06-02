@@ -59,7 +59,7 @@ const isAnchor = (n) => !!n.url;
 const splitNone = () => (chrome.tabs && chrome.tabs.SPLIT_VIEW_ID_NONE != null ? chrome.tabs.SPLIT_VIEW_ID_NONE : -1);
 
 /* ---------- metadata ---------- */
-function defaultMeta() { return { spaceColor: {}, collapsed: {}, activeSpaceId: null, density: "compact" }; }
+function defaultMeta() { return { spaceColor: {}, collapsed: {}, activeSpaceId: null, density: "compact", tourSeen: false }; }
 async function loadMeta() {
   const obj = await chrome.storage.local.get(META_KEY);
   meta = Object.assign(defaultMeta(), obj[META_KEY] || {});
@@ -678,6 +678,101 @@ async function deleteSpace() {
 }
 
 /* ============================================================
+   FIRST-RUN GUIDED TOUR  (coachmarks over the live UI)
+   ============================================================ */
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+const TOUR = [
+  {
+    key: "Harbor · 海図",
+    title: "ようこそ、Harbor へ。",
+    body: "タブを物置にしないための作業港です。<b>係留したもの</b>（また戻る場所）と、<b>いま流れているもの</b>（開いているタブ）を分けて扱います。30秒だけ案内します。",
+    center: true,
+  },
+  {
+    sel: "#spaces", key: "01 · スペース",
+    title: "スペース = 作業の文脈",
+    body: "ブックマークバー直下の<b>フォルダ</b>が、そのままスペースになります。「＋」で作成。<b>1〜9</b> キーや横スワイプでも切り替えられます。",
+  },
+  {
+    sel: "#pinsBlock", key: "02 · PINS",
+    title: "どこでも出る定番",
+    body: "バーに裸で置いたブックマークは、スペースを問わず常にこの列に並びます。タブをここへドラッグすればピン留め。",
+  },
+  {
+    sel: ".block-anchored", key: "03 · 係留 / ANCHORED",
+    title: "このスペースの戻り先",
+    body: "よく戻るページを<b>錨</b>として固定します。「現在のタブ」で今のページを追加、「すべて開く」でまとめて復帰。点灯しているタイルは、いまそのタブが開いている印です。",
+  },
+  {
+    sel: ".block-live", key: "04 · 流れ / LIVE",
+    title: "いま開いているタブ",
+    body: "現在のタブを縦に一覧。<b>⚓</b> でこのスペースの錨へ格上げ、「片付け」でどこにも保存していないタブだけを閉じられます。",
+  },
+  {
+    key: "海図 完成",
+    title: "あとは航海するだけ。",
+    body: `<b>${IS_MAC ? "⌘" : "Ctrl"}+Shift+K</b> でいつでもパネルを開閉。この案内は右上の <b>?</b> からいつでも見直せます。`,
+    center: true,
+  },
+];
+let tourIdx = -1;
+function renderTourDots() {
+  const dots = $("#tourDots");
+  dots.innerHTML = "";
+  TOUR.forEach((_, i) => { const d = document.createElement("i"); if (i === tourIdx) d.classList.add("on"); dots.appendChild(d); });
+}
+function positionTour() {
+  const step = TOUR[tourIdx];
+  const tour = $("#tour"), spot = $("#tourSpot"), card = $("#tourCard");
+  const el = step.sel ? document.querySelector(step.sel) : null;
+  if (step.center || !el) { tour.classList.add("center"); card.style.left = card.style.top = ""; return; }
+  tour.classList.remove("center");
+  const r = el.getBoundingClientRect();
+  const pad = 6;
+  const sx = Math.max(4, r.left - pad), sy = Math.max(4, r.top - pad);
+  const sw = Math.min(window.innerWidth - 8 - sx, r.width + pad * 2);
+  const sh = r.height + pad * 2;
+  spot.style.left = sx + "px"; spot.style.top = sy + "px";
+  spot.style.width = sw + "px"; spot.style.height = sh + "px";
+  const cw = card.offsetWidth, ch = card.offsetHeight, gap = 12;
+  let top = sy + sh + gap;
+  if (top + ch > window.innerHeight - 8) top = Math.max(8, sy - ch - gap); // flip above when no room below
+  let left = sx + sw / 2 - cw / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - cw - 8));
+  card.style.left = left + "px"; card.style.top = top + "px";
+}
+function showTourStep(i) {
+  tourIdx = Math.max(0, Math.min(TOUR.length - 1, i));
+  const step = TOUR[tourIdx];
+  $("#tourKey").textContent = step.key || "";
+  $("#tourTitle").textContent = step.title || "";
+  $("#tourBody").innerHTML = step.body || "";
+  $("#tourBack").classList.toggle("hidden", tourIdx === 0);
+  $("#tourNext").textContent = tourIdx === TOUR.length - 1 ? "はじめる" : "次へ";
+  renderTourDots();
+  positionTour();
+}
+function startTour() {
+  $("#tour").classList.remove("hidden");
+  showTourStep(0);
+}
+function endTour() {
+  $("#tour").classList.add("hidden");
+  tourIdx = -1;
+  if (meta && !meta.tourSeen) { meta.tourSeen = true; saveMeta(); }
+}
+function tourNext() { if (tourIdx >= TOUR.length - 1) endTour(); else showTourStep(tourIdx + 1); }
+function tourPrev() { if (tourIdx > 0) showTourStep(tourIdx - 1); }
+function tourActive() { return !$("#tour").classList.contains("hidden"); }
+function wireTour() {
+  $("#helpToggle").addEventListener("click", startTour);
+  $("#tourNext").addEventListener("click", tourNext);
+  $("#tourBack").addEventListener("click", tourPrev);
+  $("#tourSkip").addEventListener("click", endTour);
+  window.addEventListener("resize", () => { if (tourActive()) positionTour(); });
+}
+
+/* ============================================================
    WIRING / BOOT
    ============================================================ */
 let renderTimer = null;
@@ -709,6 +804,12 @@ function wireStaticUi() {
   document.addEventListener("click", (e) => { if (!e.target.closest("#groupPop") && !e.target.classList.contains("g-dot")) $("#groupPop").classList.add("hidden"); });
 
   document.addEventListener("keydown", async (e) => {
+    if (tourActive()) {
+      if (e.key === "Escape") endTour();
+      else if (e.key === "ArrowRight" || e.key === "Enter") tourNext();
+      else if (e.key === "ArrowLeft") tourPrev();
+      return;
+    }
     if (e.key === "Escape") { closeAnchorModal(); closeSpaceModal(); hideUndo(); $("#groupPop").classList.add("hidden"); return; }
     if (e.key === "Enter") {
       if (!$("#overlay").classList.contains("hidden")) { saveAnchorModal(); return; }
@@ -730,6 +831,7 @@ function wireStaticUi() {
     .forEach((ev) => { if (chrome.tabGroups[ev]) chrome.tabGroups[ev].addListener(scheduleRender); });
 
   wireSpaceSwipe();
+  wireTour();
   wirePinsDrop($("#pins")); // wire the persistent PINS container ONCE (not per render)
 }
 
@@ -738,4 +840,5 @@ function wireStaticUi() {
   await loadMeta();
   barId = await resolveBarId();
   await renderAll();
+  if (!meta.tourSeen) startTour(); // first run: orient the navigator before they set sail
 })();

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Harbor",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "ブックマークバーを錨(Anchor)として空間管理するサイドパネル。タブを保存場所にしない。",
   "minimum_chrome_version": "114",
   "permissions": ["sidePanel", "tabs", "storage", "favicon", "tabGroups", "bookmarks"],

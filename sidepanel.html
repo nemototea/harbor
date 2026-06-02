@@ -18,6 +18,7 @@
           <input id="filter" class="filter" type="text" placeholder="絞り込み" autocomplete="off" spellcheck="false" aria-label="錨を絞り込み" />
         </div>
         <button id="densityToggle" class="icon-btn" title="表示密度を切り替え" aria-label="表示密度">⊟</button>
+        <button id="helpToggle" class="icon-btn" title="使い方を見る" aria-label="使い方を見る">?</button>
         <button id="editToggle" class="icon-btn" title="編集モード">編集</button>
       </div>
     </header>
@@ -99,6 +100,22 @@
         <span class="spacer"></span>
         <button id="sCancel" class="btn">キャンセル</button>
         <button id="sSave" class="btn btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- first-run guided tour -->
+  <div class="tour hidden" id="tour" aria-live="polite">
+    <div class="tour-spot" id="tourSpot" aria-hidden="true"></div>
+    <div class="tour-card" id="tourCard" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+      <span class="tour-key" id="tourKey"></span>
+      <h3 class="tour-title" id="tourTitle"></h3>
+      <p class="tour-body" id="tourBody"></p>
+      <div class="tour-foot">
+        <button class="tour-skip" id="tourSkip">スキップ</button>
+        <span class="tour-dots" id="tourDots" aria-hidden="true"></span>
+        <button class="tour-nav tour-back" id="tourBack">戻る</button>
+        <button class="tour-nav tour-next" id="tourNext">次へ</button>
       </div>
     </div>
   </div>
