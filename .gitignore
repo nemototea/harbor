@@ -14,5 +14,9 @@ Thumbs.db
 *.zip
 dist/
 
+# Promo render workspace (frames / node_modules / ffmpeg)
+.promo/
+assets/frames/
+
 # Agent/editor local
 .claude/
