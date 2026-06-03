@@ -2,6 +2,12 @@
   <img src="assets/banner-ui.png" alt="Harbor — Anchor-based workspace for Chrome" width="100%">
 </p>
 
+<p align="center">
+  <a href="assets/demo.mp4"><img src="assets/demo.gif" alt="Harbor デモ — スペース切替・ドラッグで係留・クリックで戻る" width="100%"></a>
+</p>
+
+<p align="center"><sub>スペース切替 → タブをドラッグで係留 → クリックで戻る。 <a href="assets/demo.mp4">▶ 動画版 (MP4)</a></sub></p>
+
 # Harbor
 
 **ブックマークバーを「錨(Anchor)」として空間管理する Chrome サイドパネル拡張。**
