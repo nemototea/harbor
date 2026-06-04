@@ -31,9 +31,6 @@
         <button id="helpToggle" class="icon-btn"
           data-i18n-title="helpToggleTitle"
           data-i18n-aria-label="helpToggleTitle">?</button>
-        <button id="editToggle" class="icon-btn"
-          data-i18n="editLabel"
-          data-i18n-title="editToggleTitle"></button>
       </div>
     </header>
 
@@ -83,6 +80,9 @@
   <!-- group color popover -->
   <div class="group-pop hidden" id="groupPop"></div>
 
+  <!-- shared overflow / right-click menu (spaces · groups · anchors · pins) -->
+  <div class="item-menu hidden" id="itemMenu" role="menu"></div>
+
   <!-- undo snackbar -->
   <div class="snackbar hidden" id="snackbar">
     <span id="snackMsg"></span>
@@ -118,6 +118,20 @@
         <span class="spacer"></span>
         <button id="sCancel" class="btn" data-i18n="cancelLabel"></button>
         <button id="sSave" class="btn btn-primary" data-i18n="saveLabel"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- in-app confirm / prompt dialog -->
+  <div class="overlay hidden" id="dialogOverlay">
+    <div class="modal modal-dialog">
+      <h2 id="dlgTitle"></h2>
+      <p id="dlgMsg" class="dlg-msg"></p>
+      <label id="dlgInputWrap" class="hidden"><input type="text" id="dlgInput" autocomplete="off" /></label>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button id="dlgCancel" class="btn" data-i18n="cancelLabel"></button>
+        <button id="dlgOk" class="btn btn-primary" data-i18n="okLabel"></button>
       </div>
     </div>
   </div>

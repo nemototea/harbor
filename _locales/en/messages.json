@@ -8,12 +8,16 @@
   "densityToggleTitle":    { "message": "Toggle display density" },
   "densityToggleAriaLabel":{ "message": "Display density" },
   "helpToggleTitle":       { "message": "How to use" },
-  "editToggleTitle":       { "message": "Edit mode" },
-  "editLabel":             { "message": "Edit" },
-  "doneLabel":             { "message": "Done" },
+
+  "moreActionsTitle":      { "message": "Actions" },
+  "menuEdit":              { "message": "Edit" },
+  "menuEditSpace":         { "message": "Rename & color" },
+  "menuRename":            { "message": "Rename" },
+  "menuChangeColor":       { "message": "Change color" },
+  "okLabel":               { "message": "OK" },
+  "confirmTitle":          { "message": "Confirm" },
 
   "spacesAriaLabel":       { "message": "Spaces" },
-  "spaceEditBtnTitle":     { "message": "Edit" },
   "addSpaceTitle":         { "message": "Add space (creates a folder in bookmark bar)" },
 
   "openAllLabel":          { "message": "Open all" },
@@ -25,10 +29,8 @@
   "addCurrentTabLabel":    { "message": "Current tab" },
 
   "resetTabTitle":         { "message": "Reset active tab to this URL" },
-  "anchorDeleteTitle":     { "message": "Delete (removes bookmark)" },
   "currentlyOpenTitle":    { "message": "This tab is currently open" },
 
-  "pinDeleteTitle":        { "message": "Remove pin" },
   "pinCurrentTabTitle":    { "message": "Pin current tab" },
   "pinDragHint":           { "message": "Drag a tab here to pin" },
 

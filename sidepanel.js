@@ -34,7 +34,6 @@ const GROUP_COLOR_NAMES = Object.keys(GROUP_COLORS);
 
 let barId = null;
 let meta = null;
-let editing = false;
 let filterText = "";
 let liveTabs = [];
 let modalCtx = null;
@@ -42,6 +41,7 @@ let spaceCtx = null;
 let undoCtx = null;
 let snackTimer = null;
 let dnd = null;
+let dialogResolve = null;
 
 /* ---------- i18n ---------- */
 const t = (key, subs) => chrome.i18n.getMessage(key, subs) || key;
@@ -153,6 +153,23 @@ async function resetActiveTo(url) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) await chrome.tabs.update(tab.id, { url });
 }
+// reorder a live tab next to a target row. chrome.tabs.move uses final-index
+// semantics (like bookmarks.move), so adjust by one when shifting forward.
+// Indices are re-read fresh (the rendered snapshot may be stale); Chrome
+// natively keeps tab groups contiguous and pinned tabs leading.
+async function moveLiveTab(srcTabId, targetTabId, after) {
+  try {
+    const [src, target] = await Promise.all([
+      chrome.tabs.get(srcTabId).catch(() => null),
+      chrome.tabs.get(targetTabId).catch(() => null),
+    ]);
+    if (!src || !target) return;
+    let dest = target.index + (after ? 1 : 0);
+    if (src.index < dest) dest -= 1;
+    if (dest === src.index) return;
+    await chrome.tabs.move(srcTabId, { index: dest });
+  } catch (err) { console.warn("Harbor: tab move failed", err); }
+}
 
 /* ---------- space verbs ---------- */
 async function openAllInActiveSpace() {
@@ -175,7 +192,7 @@ async function tidyLiveTabs() {
   const tabs = await chrome.tabs.query({ currentWindow: true });
   const toClose = tabs.filter((t) => !t.active && !t.pinned && t.url && !saved.has(litKey(t.url)));
   if (!toClose.length) return;
-  if (!confirm(t("tidyConfirm", [String(toClose.length)]))) return;
+  if (!(await confirmDialog(t("tidyConfirm", [String(toClose.length)]), { okLabel: t("tidyBtnLabel") }))) return;
   await chrome.tabs.remove(toClose.map((t) => t.id));
 }
 
@@ -203,6 +220,103 @@ function hideUndo() { $("#snackbar").classList.add("hidden"); undoCtx = null; }
 async function runUndo() { if (undoCtx) { const fn = undoCtx.fn; hideUndo(); await fn(); } }
 
 /* ============================================================
+   ITEM MENU  — one overflow ( ⋯ ) menu, shared by hover button
+   AND right-click. Used by spaces, groups, anchors and pins so
+   rename / delete / etc. live in a single discoverable place.
+   ============================================================ */
+function closeItemMenu() { const m = $("#itemMenu"); if (m) { m.classList.add("hidden"); m.innerHTML = ""; } }
+function itemMenuOpen() { const m = $("#itemMenu"); return m && !m.classList.contains("hidden"); }
+// rows: [{ icon, label, danger?, onClick }] | { sep: true }
+function openItemMenu(rows, x, y, anchorEl) {
+  const menu = $("#itemMenu");
+  menu.innerHTML = "";
+  rows.forEach((r) => {
+    if (r.sep) { const hr = document.createElement("div"); hr.className = "im-sep"; menu.appendChild(hr); return; }
+    const b = document.createElement("button");
+    b.className = "im-row" + (r.danger ? " danger" : "");
+    const ico = document.createElement("span"); ico.className = "im-ico"; ico.textContent = r.icon || "";
+    const lbl = document.createElement("span"); lbl.className = "im-label"; lbl.textContent = r.label;
+    b.append(ico, lbl);
+    b.addEventListener("click", async (e) => { e.stopPropagation(); closeItemMenu(); await r.onClick(); });
+    menu.appendChild(b);
+  });
+  menu.classList.remove("hidden");
+  // measure, then clamp into the viewport (anchored under the ⋯ button, or at the cursor)
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  let px = x, py = y;
+  if (anchorEl) { const r = anchorEl.getBoundingClientRect(); px = r.right - mw; py = r.bottom + 4; }
+  px = Math.max(8, Math.min(px, window.innerWidth - mw - 8));
+  py = Math.max(8, Math.min(py, window.innerHeight - mh - 8));
+  menu.style.left = px + "px"; menu.style.top = py + "px";
+  const first = menu.querySelector(".im-row"); if (first) first.focus();
+}
+// attach the SAME menu to an element's right-click; getRows is called lazily
+function wireContextMenu(el, getRows) {
+  el.addEventListener("contextmenu", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    openItemMenu(getRows(), e.clientX, e.clientY);
+  });
+}
+// the visible hover/focus affordance — a ⋯ button opening the same menu
+function makeMoreBtn(getRows) {
+  const b = document.createElement("button");
+  b.className = "more"; b.textContent = "⋯";
+  b.title = t("moreActionsTitle"); b.setAttribute("aria-label", t("moreActionsTitle"));
+  b.addEventListener("click", (e) => { e.stopPropagation(); openItemMenu(getRows(), 0, 0, b); });
+  return b;
+}
+
+/* ============================================================
+   DIALOG  — in-app confirm / prompt (replaces window.confirm /
+   window.prompt so destructive + rename flows stay on-brand and
+   keyboard-driven). Resolves to the input string, true, or null.
+   ============================================================ */
+function openDialog({ title, message, input, defaultValue, okLabel, cancelLabel, danger }) {
+  return new Promise((resolve) => {
+    dialogResolve = resolve;
+    $("#dlgTitle").textContent = title || "";
+    const msgEl = $("#dlgMsg");
+    msgEl.textContent = message || "";
+    msgEl.classList.toggle("hidden", !message);
+    const hasInput = !!input;
+    $("#dlgInputWrap").classList.toggle("hidden", !hasInput);
+    if (hasInput) $("#dlgInput").value = defaultValue || "";
+    const ok = $("#dlgOk");
+    ok.textContent = okLabel || t("okLabel");
+    ok.classList.toggle("btn-danger", !!danger);
+    ok.classList.toggle("btn-primary", !danger);
+    $("#dlgCancel").textContent = cancelLabel || t("cancelLabel");
+    $("#dialogOverlay").classList.remove("hidden");
+    (hasInput ? $("#dlgInput") : ok).focus();
+    if (hasInput) $("#dlgInput").select();
+  });
+}
+function closeDialog(result) {
+  $("#dialogOverlay").classList.add("hidden");
+  const r = dialogResolve; dialogResolve = null;
+  if (r) r(result);
+}
+function submitDialog() {
+  if (!dialogResolve) return;
+  const hasInput = !$("#dlgInputWrap").classList.contains("hidden");
+  closeDialog(hasInput ? $("#dlgInput").value : true);
+}
+async function confirmDialog(message, opts = {}) {
+  const r = await openDialog({
+    title: opts.title || t("confirmTitle"), message,
+    okLabel: opts.okLabel || t("okLabel"), danger: opts.danger !== false,
+  });
+  return r === true;
+}
+async function promptDialog(title, defaultValue, opts = {}) {
+  const r = await openDialog({
+    title, message: opts.message, input: true, defaultValue,
+    okLabel: opts.okLabel || t("saveLabel"),
+  });
+  return r == null ? null : String(r);
+}
+
+/* ============================================================
    RENDER
    ============================================================ */
 async function renderAll() {
@@ -228,11 +342,17 @@ function renderSpaces(spaces) {
     pill.dataset.id = s.id;
     pill.draggable = true;
     pill.innerHTML =
-      `<span class="dot" style="background:${color}"></span><span class="space-name"></span>` +
-      `<span class="space-edit" title="${t("spaceEditBtnTitle")}">✎</span>`;
+      `<span class="dot" style="background:${color}"></span><span class="space-name"></span>`;
     pill.querySelector(".space-name").textContent = s.name;
+    const rows = () => [
+      { icon: "✎", label: t("menuEditSpace"), onClick: () => openSpaceModal("edit", s, idx) },
+      { sep: true },
+      { icon: "×", label: t("deleteLabel"), danger: true, onClick: () => deleteSpaceById(s.id) },
+    ];
+    pill.appendChild(makeMoreBtn(rows));
+    wireContextMenu(pill, rows);
     pill.addEventListener("click", (e) => {
-      if (e.target.classList.contains("space-edit")) { openSpaceModal("edit", s, idx); return; }
+      if (e.target.closest(".more")) return;
       meta.activeSpaceId = s.id; saveMeta(); renderAll();
     });
     wireSpaceDrag(pill, s);
@@ -318,11 +438,14 @@ async function renderPins() {
     chip.title = `${p.title || ""}\n${p.url}`;
     const img = document.createElement("img");
     img.className = "pin-fav"; img.src = faviconUrl(p.url); img.alt = "";
-    const del = document.createElement("button");
-    del.className = "pin-del"; del.textContent = "×"; del.title = t("pinDeleteTitle");
-    del.addEventListener("click", (e) => { e.stopPropagation(); removeAnchorWithUndo(p); });
-    chip.append(img, del);
-    chip.addEventListener("click", () => openUrl(p.url));
+    const rows = () => [
+      { icon: "✎", label: t("menuEdit"), onClick: () => openAnchorModal("edit", p) },
+      { sep: true },
+      { icon: "×", label: t("deleteLabel"), danger: true, onClick: () => removeAnchorWithUndo(p) },
+    ];
+    chip.append(img, makeMoreBtn(rows));
+    wireContextMenu(chip, rows);
+    chip.addEventListener("click", (e) => { if (e.target.closest(".more")) return; openUrl(p.url); });
     wireAnchorDrag(chip, p, barId);
     wrap.appendChild(chip);
   });
@@ -402,13 +525,16 @@ function buildGrid(parentId, anchors, litSet) {
     tile.draggable = true; tile.dataset.id = a.id; tile.title = `${a.title || ""}\n${a.url}`;
     const img = document.createElement("img"); img.className = "fav"; img.src = faviconUrl(a.url); img.alt = "";
     const label = document.createElement("span"); label.className = "label"; label.textContent = a.title || hostOf(a.url);
-    const reset = document.createElement("button"); reset.className = "reset"; reset.title = t("resetTabTitle"); reset.textContent = "⟲";
-    reset.addEventListener("click", (e) => { e.stopPropagation(); resetActiveTo(a.url); });
-    const badge = document.createElement("button"); badge.className = "badge"; badge.title = t("anchorDeleteTitle"); badge.textContent = "×";
-    badge.addEventListener("click", (e) => { e.stopPropagation(); removeAnchorWithUndo(a); });
     const dock = document.createElement("span"); dock.className = "dock-dot"; dock.title = t("currentlyOpenTitle");
-    tile.append(reset, img, label, badge, dock);
-    tile.addEventListener("click", () => { if (editing) openAnchorModal("edit", a); else openUrl(a.url); });
+    const rows = () => [
+      { icon: "✎", label: t("menuEdit"), onClick: () => openAnchorModal("edit", a) },
+      { icon: "⟲", label: t("resetTabTitle"), onClick: () => resetActiveTo(a.url) },
+      { sep: true },
+      { icon: "×", label: t("deleteLabel"), danger: true, onClick: () => removeAnchorWithUndo(a) },
+    ];
+    tile.append(img, label, makeMoreBtn(rows), dock);
+    wireContextMenu(tile, rows);
+    tile.addEventListener("click", (e) => { if (e.target.closest(".more")) return; openUrl(a.url); });
     wireAnchorDrag(tile, a, parentId);
     grid.appendChild(tile);
   });
@@ -511,6 +637,30 @@ async function renderLive() {
     if (g && g.collapsed) continue;
     list.appendChild(buildTabRow(t, !!grouped, g, anchorKeys, splitCount));
   }
+  applyLiveFilter();
+}
+
+// the top-bar filter dims/hides non-matching LIVE rows too (not just anchors),
+// and folds away expanded group headers left with nothing visible.
+function tabMatches(tab) {
+  if (!filterText) return true;
+  return norm(tab.title).includes(filterText) || norm(tab.url).includes(filterText);
+}
+function applyLiveFilter() {
+  const list = $("#liveList");
+  if (!list) return;
+  const visByGroup = {};
+  list.querySelectorAll(".trow").forEach((row) => {
+    const tab = liveTabs.find((t) => t.id === Number(row.dataset.tabId));
+    const match = tab ? tabMatches(tab) : true;
+    row.classList.toggle("dim", !match);
+    if (match && tab && tab.groupId != null && tab.groupId !== NONE) visByGroup[tab.groupId] = (visByGroup[tab.groupId] || 0) + 1;
+  });
+  list.querySelectorAll(".group-head").forEach((h) => {
+    const gid = Number(h.dataset.gid);
+    const empty = filterText && !h.classList.contains("collapsed") && !visByGroup[gid];
+    h.classList.toggle("dim", !!empty);
+  });
 }
 
 function buildGroupHeader(g, gid, count) {
@@ -526,26 +676,31 @@ function buildGroupHeader(g, gid, count) {
   const name = document.createElement("span"); name.className = "g-name"; name.textContent = (g && g.title) || t("groupDefaultName");
   name.title = t("groupRenameHint");
   const cnt = document.createElement("span"); cnt.className = "g-count"; cnt.textContent = String(count);
-  const ung = document.createElement("button"); ung.className = "g-ungroup"; ung.textContent = "⤴"; ung.title = t("ungroupTitle");
 
-  head.append(caret, dot, name, cnt, ung);
+  const renameGroup = async () => {
+    const next = await promptDialog(t("groupNamePrompt"), (g && g.title) || "");
+    if (next != null && chrome.tabGroups) await chrome.tabGroups.update(gid, { title: next });
+  };
+  const ungroupGroup = async () => {
+    const ids = liveTabs.filter((t) => t.groupId === gid).map((t) => t.id);
+    if (ids.length) await chrome.tabs.ungroup(ids);
+  };
+  const rows = () => [
+    { icon: "✎", label: t("menuRename"), onClick: renameGroup },
+    { icon: "●", label: t("menuChangeColor"), onClick: () => openGroupColorPop(gid, dot) },
+    { sep: true },
+    { icon: "⤴", label: t("ungroupTitle"), danger: true, onClick: ungroupGroup },
+  ];
+  const more = makeMoreBtn(rows);
+  head.append(caret, dot, name, cnt, more);
+  wireContextMenu(head, rows);
 
   head.addEventListener("click", async (e) => {
-    if (e.target === dot || e.target === ung || e.target === name) return;
+    if (e.target === dot || e.target === name || e.target.closest(".more")) return;
     if (chrome.tabGroups && g) await chrome.tabGroups.update(gid, { collapsed: !collapsed });
   });
   dot.addEventListener("click", (e) => { e.stopPropagation(); openGroupColorPop(gid, dot); });
-  name.addEventListener("dblclick", async (e) => {
-    e.stopPropagation();
-    const cur = (g && g.title) || "";
-    const next = prompt(t("groupNamePrompt"), cur);
-    if (next != null && chrome.tabGroups) await chrome.tabGroups.update(gid, { title: next });
-  });
-  ung.addEventListener("click", async (e) => {
-    e.stopPropagation();
-    const ids = liveTabs.filter((t) => t.groupId === gid).map((t) => t.id);
-    if (ids.length) await chrome.tabs.ungroup(ids);
-  });
+  name.addEventListener("dblclick", (e) => { e.stopPropagation(); renameGroup(); });
 
   // accept a tab dropped onto the header → join this group
   head.addEventListener("dragover", (e) => { if (dnd && dnd.kind === "live") { e.preventDefault(); head.classList.add("drop-join"); } });
@@ -595,10 +750,26 @@ function buildTabRow(tab, grouped, g, anchorKeys, splitCount) {
   row.append(img, title, split, moored, grp, pin, close);
   row.addEventListener("click", () => chrome.tabs.update(tab.id, { active: true }));
   row.addEventListener("dragstart", (e) => { dnd = { kind: "live", tabId: tab.id }; row.classList.add("dragging"); e.dataTransfer.effectAllowed = "copyMove"; });
+  // reorder LIVE tabs by dropping one row onto another (vertical before/after)
+  row.addEventListener("dragover", (e) => {
+    if (!dnd || dnd.kind !== "live" || dnd.tabId === tab.id) return;
+    e.preventDefault(); e.stopPropagation();
+    const r = row.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2;
+    row.classList.toggle("drop-after", after); row.classList.toggle("drop-before", !after);
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("drop-before", "drop-after"));
+  row.addEventListener("drop", async (e) => {
+    if (!dnd || dnd.kind !== "live" || dnd.tabId === tab.id) return;
+    e.preventDefault(); e.stopPropagation();
+    const r = row.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2;
+    const srcId = dnd.tabId; dnd = null;
+    await moveLiveTab(srcId, tab.id, after);
+  });
   row.addEventListener("dragend", () => {
     row.classList.remove("dragging");
     document.querySelectorAll(".grid,.pins").forEach((g2) => g2.classList.remove("drop-into"));
     document.querySelectorAll(".group-head").forEach((h) => h.classList.remove("drop-join"));
+    document.querySelectorAll(".trow").forEach((r2) => r2.classList.remove("drop-before", "drop-after"));
     dnd = null;
   });
   return row;
@@ -692,16 +863,22 @@ async function saveSpaceModal() {
   closeSpaceModal();
   await renderAll(); // color lives in meta, not bookmarks — render explicitly
 }
+async function deleteSpaceById(id) {
+  const node = (await chrome.bookmarks.getSubTree(id))[0];
+  if (!node) return;
+  const count = (node.children || []).filter(isAnchor).length;
+  if (!(await confirmDialog(t("deleteSpaceConfirm", [node.title || "", String(count)]), { okLabel: t("deleteLabel") }))) return;
+  await chrome.bookmarks.removeTree(id);
+  delete meta.spaceColor[id];
+  if (meta.activeSpaceId === id) meta.activeSpaceId = null;
+  await saveMeta();
+  await renderAll(); // color lives in meta, not bookmarks — render explicitly
+}
 async function deleteSpace() {
   if (!spaceCtx || !spaceCtx.id) return;
-  const node = (await chrome.bookmarks.getSubTree(spaceCtx.id))[0];
-  const count = (node.children || []).filter(isAnchor).length;
-  if (!confirm(t("deleteSpaceConfirm", [node.title || "", String(count)]))) return;
-  await chrome.bookmarks.removeTree(spaceCtx.id);
-  delete meta.spaceColor[spaceCtx.id];
-  if (meta.activeSpaceId === spaceCtx.id) meta.activeSpaceId = null;
-  await saveMeta();
+  const id = spaceCtx.id;
   closeSpaceModal();
+  await deleteSpaceById(id);
 }
 
 /* ============================================================
@@ -752,8 +929,11 @@ function showTourStep(i) {
   $("#tourKey").textContent = step.key || "";
   $("#tourTitle").textContent = step.title || "";
   $("#tourBody").innerHTML = step.body || "";
+  const isLast = tourIdx === tour_data.length - 1;
   $("#tourBack").classList.toggle("hidden", tourIdx === 0);
-  $("#tourNext").textContent = tourIdx === tour_data.length - 1 ? t("tourStartLabel") : t("tourNextLabel");
+  // on the final step "Skip" duplicates "Get started" — drop it to free room for the wider label
+  $("#tourSkip").classList.toggle("hidden", isLast);
+  $("#tourNext").textContent = isLast ? t("tourStartLabel") : t("tourNextLabel");
   renderTourDots();
   positionTour();
 }
@@ -784,13 +964,8 @@ let renderTimer = null;
 function scheduleRender() { clearTimeout(renderTimer); renderTimer = setTimeout(renderAll, 100); }
 
 function wireStaticUi() {
-  $("#editToggle").addEventListener("click", () => {
-    editing = !editing;
-    document.querySelector(".app").classList.toggle("editing", editing);
-    $("#editToggle").textContent = editing ? t("doneLabel") : t("editLabel");
-  });
   $("#densityToggle").addEventListener("click", () => { meta.density = meta.density === "compact" ? "cozy" : "compact"; saveMeta(); renderAnchored(); });
-  $("#filter").addEventListener("input", (e) => { filterText = norm(e.target.value); renderAnchored(); });
+  $("#filter").addEventListener("input", (e) => { filterText = norm(e.target.value); renderAnchored(); applyLiveFilter(); });
   $("#spaceOpenAll").addEventListener("click", openAllInActiveSpace);
   $("#tidyBtn").addEventListener("click", tidyLiveTabs);
 
@@ -804,9 +979,19 @@ function wireStaticUi() {
   $("#sDelete").addEventListener("click", deleteSpace);
   $("#snackUndo").addEventListener("click", runUndo);
 
+  $("#dlgOk").addEventListener("click", submitDialog);
+  $("#dlgCancel").addEventListener("click", () => closeDialog(null));
+  $("#dialogOverlay").addEventListener("click", (e) => { if (e.target.id === "dialogOverlay") closeDialog(null); });
+
   $("#overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") closeAnchorModal(); });
   $("#spaceOverlay").addEventListener("click", (e) => { if (e.target.id === "spaceOverlay") closeSpaceModal(); });
-  document.addEventListener("click", (e) => { if (!e.target.closest("#groupPop") && !e.target.classList.contains("g-dot")) $("#groupPop").classList.add("hidden"); });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#groupPop") && !e.target.classList.contains("g-dot")) $("#groupPop").classList.add("hidden");
+    if (!e.target.closest("#itemMenu") && !e.target.closest(".more")) closeItemMenu();
+  });
+  // floating layers shouldn't linger when the surface beneath them moves
+  document.addEventListener("scroll", () => { closeItemMenu(); $("#groupPop").classList.add("hidden"); }, true);
+  window.addEventListener("resize", () => { closeItemMenu(); $("#groupPop").classList.add("hidden"); });
 
   document.addEventListener("keydown", async (e) => {
     if (tourActive()) {
@@ -815,8 +1000,13 @@ function wireStaticUi() {
       else if (e.key === "ArrowLeft") tourPrev();
       return;
     }
-    if (e.key === "Escape") { closeAnchorModal(); closeSpaceModal(); hideUndo(); $("#groupPop").classList.add("hidden"); return; }
+    if (e.key === "Escape") {
+      if (itemMenuOpen()) { closeItemMenu(); return; }
+      if (dialogResolve) { closeDialog(null); return; }
+      closeAnchorModal(); closeSpaceModal(); hideUndo(); $("#groupPop").classList.add("hidden"); return;
+    }
     if (e.key === "Enter") {
+      if (dialogResolve) { submitDialog(); return; }
       if (!$("#overlay").classList.contains("hidden")) { saveAnchorModal(); return; }
       if (!$("#spaceOverlay").classList.contains("hidden")) { saveSpaceModal(); return; }
     }
