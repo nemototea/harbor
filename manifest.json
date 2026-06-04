@@ -2,14 +2,15 @@
   "manifest_version": 3,
   "name": "Harbor",
   "version": "1.0.0",
-  "description": "ブックマークバーを錨(Anchor)として空間管理するサイドパネル。タブを保存場所にしない。",
+  "description": "__MSG_extDescription__",
+  "default_locale": "ja",
   "minimum_chrome_version": "114",
   "permissions": ["sidePanel", "tabs", "storage", "favicon", "tabGroups", "bookmarks"],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Harbor を開く",
+    "default_title": "__MSG_actionTitle__",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -23,7 +24,7 @@
   "commands": {
     "_execute_action": {
       "suggested_key": { "default": "Ctrl+Shift+K", "mac": "Command+Shift+K" },
-      "description": "Harbor を開く / 閉じる"
+      "description": "__MSG_commandDescription__"
     }
   },
   "icons": {

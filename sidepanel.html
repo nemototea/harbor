@@ -5,7 +5,7 @@
   SPDX-License-Identifier: GPL-3.0-or-later
   Free software under the GNU GPL v3 or later; see the LICENSE file.
 -->
-<html lang="ja">
+<html lang="">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -21,15 +21,23 @@
       </div>
       <div class="topbar-tools">
         <div class="filter-wrap">
-          <input id="filter" class="filter" type="text" placeholder="絞り込み" autocomplete="off" spellcheck="false" aria-label="錨を絞り込み" />
+          <input id="filter" class="filter" type="text" placeholder="" autocomplete="off" spellcheck="false"
+            data-i18n-placeholder="filterPlaceholder"
+            data-i18n-aria-label="filterAriaLabel" />
         </div>
-        <button id="densityToggle" class="icon-btn" title="表示密度を切り替え" aria-label="表示密度">⊟</button>
-        <button id="helpToggle" class="icon-btn" title="使い方を見る" aria-label="使い方を見る">?</button>
-        <button id="editToggle" class="icon-btn" title="編集モード">編集</button>
+        <button id="densityToggle" class="icon-btn"
+          data-i18n-title="densityToggleTitle"
+          data-i18n-aria-label="densityToggleAriaLabel">⊟</button>
+        <button id="helpToggle" class="icon-btn"
+          data-i18n-title="helpToggleTitle"
+          data-i18n-aria-label="helpToggleTitle">?</button>
+        <button id="editToggle" class="icon-btn"
+          data-i18n="editLabel"
+          data-i18n-title="editToggleTitle"></button>
       </div>
     </header>
 
-    <nav class="spaces" id="spaces" aria-label="スペース"></nav>
+    <nav class="spaces" id="spaces" data-i18n-aria-label="spacesAriaLabel"></nav>
 
     <main class="content">
       <!-- pinned bar bookmarks (loose, always visible) -->
@@ -47,7 +55,9 @@
           <span class="space-title" id="spaceTitle"></span>
           <span class="count" id="anchorCount"></span>
           <span class="spacer"></span>
-          <button id="spaceOpenAll" class="mini-btn" title="このスペースの錨をすべて開く">すべて開く</button>
+          <button id="spaceOpenAll" class="mini-btn"
+            data-i18n="openAllLabel"
+            data-i18n-title="openAllTitle"></button>
         </div>
         <div class="anchored-scroll" id="anchoredScroll"></div>
       </section>
@@ -57,14 +67,16 @@
           <span class="tag tag-live">LIVE</span>
           <span class="count" id="liveCount"></span>
           <span class="spacer"></span>
-          <button id="tidyBtn" class="mini-btn" title="どこにも保存していないタブを閉じる">片付け</button>
+          <button id="tidyBtn" class="mini-btn"
+            data-i18n="tidyBtnLabel"
+            data-i18n-title="tidyBtnTitle"></button>
         </div>
         <div class="tablist" id="liveList"></div>
       </section>
     </main>
 
     <footer class="footer">
-      <span id="hint">クリックで開く · タブをグリッドへドラッグで係留 · グループヘッダへドラッグで仲間入り · 1–9 でスペース</span>
+      <span id="hint" data-i18n="footerHint"></span>
     </footer>
   </div>
 
@@ -74,21 +86,21 @@
   <!-- undo snackbar -->
   <div class="snackbar hidden" id="snackbar">
     <span id="snackMsg"></span>
-    <button id="snackUndo" class="snack-undo">元に戻す</button>
+    <button id="snackUndo" class="snack-undo" data-i18n="undoLabel"></button>
   </div>
 
   <!-- edit / add anchor modal -->
   <div class="overlay hidden" id="overlay">
     <div class="modal">
-      <h2 id="modalTitle">錨を編集</h2>
-      <label>名前<input type="text" id="fTitle" autocomplete="off" /></label>
-      <label>URL<input type="text" id="fUrl" autocomplete="off" spellcheck="false" /></label>
-      <label>スペース<select id="fSpace"></select></label>
+      <h2 id="modalTitle"></h2>
+      <label><span data-i18n="nameLabel"></span><input type="text" id="fTitle" autocomplete="off" /></label>
+      <label><span data-i18n="urlLabel"></span><input type="text" id="fUrl" autocomplete="off" spellcheck="false" /></label>
+      <label><span data-i18n="spaceSelectLabel"></span><select id="fSpace"></select></label>
       <div class="modal-actions">
-        <button id="mDelete" class="btn btn-danger">削除</button>
+        <button id="mDelete" class="btn btn-danger" data-i18n="deleteLabel"></button>
         <span class="spacer"></span>
-        <button id="mCancel" class="btn">キャンセル</button>
-        <button id="mSave" class="btn btn-primary">保存</button>
+        <button id="mCancel" class="btn" data-i18n="cancelLabel"></button>
+        <button id="mSave" class="btn btn-primary" data-i18n="saveLabel"></button>
       </div>
     </div>
   </div>
@@ -96,16 +108,16 @@
   <!-- space modal -->
   <div class="overlay hidden" id="spaceOverlay">
     <div class="modal">
-      <h2 id="spaceModalTitle">スペース</h2>
-      <label>名前<input type="text" id="sName" autocomplete="off" /></label>
-      <label>色
+      <h2 id="spaceModalTitle"></h2>
+      <label><span data-i18n="nameLabel"></span><input type="text" id="sName" autocomplete="off" /></label>
+      <label><span data-i18n="colorLabel"></span>
         <div class="swatches" id="sSwatches"></div>
       </label>
       <div class="modal-actions">
-        <button id="sDelete" class="btn btn-danger">削除</button>
+        <button id="sDelete" class="btn btn-danger" data-i18n="deleteLabel"></button>
         <span class="spacer"></span>
-        <button id="sCancel" class="btn">キャンセル</button>
-        <button id="sSave" class="btn btn-primary">保存</button>
+        <button id="sCancel" class="btn" data-i18n="cancelLabel"></button>
+        <button id="sSave" class="btn btn-primary" data-i18n="saveLabel"></button>
       </div>
     </div>
   </div>
@@ -118,10 +130,10 @@
       <h3 class="tour-title" id="tourTitle"></h3>
       <p class="tour-body" id="tourBody"></p>
       <div class="tour-foot">
-        <button class="tour-skip" id="tourSkip">スキップ</button>
+        <button class="tour-skip" id="tourSkip" data-i18n="tourSkipLabel"></button>
         <span class="tour-dots" id="tourDots" aria-hidden="true"></span>
-        <button class="tour-nav tour-back" id="tourBack">戻る</button>
-        <button class="tour-nav tour-next" id="tourNext">次へ</button>
+        <button class="tour-nav tour-back" id="tourBack" data-i18n="tourBackLabel"></button>
+        <button class="tour-nav tour-next" id="tourNext" data-i18n="tourNextLabel"></button>
       </div>
     </div>
   </div>
