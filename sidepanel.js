@@ -896,8 +896,11 @@ function showTourStep(i) {
   $("#tourKey").textContent = step.key || "";
   $("#tourTitle").textContent = step.title || "";
   $("#tourBody").innerHTML = step.body || "";
+  const isLast = tourIdx === tour_data.length - 1;
   $("#tourBack").classList.toggle("hidden", tourIdx === 0);
-  $("#tourNext").textContent = tourIdx === tour_data.length - 1 ? t("tourStartLabel") : t("tourNextLabel");
+  // on the final step "Skip" duplicates "Get started" — drop it to free room for the wider label
+  $("#tourSkip").classList.toggle("hidden", isLast);
+  $("#tourNext").textContent = isLast ? t("tourStartLabel") : t("tourNextLabel");
   renderTourDots();
   positionTour();
 }

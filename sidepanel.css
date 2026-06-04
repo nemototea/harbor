@@ -262,14 +262,14 @@ body::before {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .app.dense .tile .label { font-size: 9px; -webkit-line-clamp: 1; }
 .tile:hover .label { color: var(--ink); }
-.tile .dock-dot { position: absolute; top: 7px; right: 8px; width: 7px; height: 7px; border-radius: 50%;
+.tile .dock-dot { position: absolute; top: 7px; left: 8px; width: 7px; height: 7px; border-radius: 50%;
   background: var(--live); box-shadow: 0 0 10px var(--live), 0 0 3px #fff; display: none; }
 .tile.lit { border-color: rgba(84,230,214,0.5);
   box-shadow: var(--spec), 0 0 22px rgba(84,230,214,0.18), var(--depth-sm); }
 .tile.lit .fav { border-color: rgba(84,230,214,0.45); }
 .tile.lit .dock-dot { display: block; }
 .tile .more {
-  position: absolute; top: 6px; left: 6px; width: 18px; height: 18px; border-radius: 7px; font-size: 12px; }
+  position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; border-radius: 7px; font-size: 12px; }
 .tile:hover .more, .tile:focus-within .more, .tile .more:focus-visible { display: flex; }
 .tile.add { border: 1px dashed var(--hairline); background: var(--glass-2); box-shadow: none;
   justify-content: center; color: var(--ink-dim); }
@@ -415,7 +415,7 @@ body::before {
 .tour-title { margin: 7px 0 6px; font-size: 14.5px; font-weight: 700; color: var(--ink); letter-spacing: 0.01em; }
 .tour-body { margin: 0; font-size: 12px; line-height: 1.7; color: var(--ink-dim); }
 .tour-foot { display: flex; align-items: center; gap: 7px; margin-top: 15px; }
-.tour-dots { display: flex; gap: 5px; flex: 1; min-width: 0; }
+.tour-dots { display: flex; gap: 5px; flex: 1 1 0; min-width: 0; overflow: hidden; }
 .tour-dots i { flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: var(--hairline); transition: background .2s ease, transform .2s ease; }
 .tour-dots i.on { background: var(--anchor); transform: scale(1.25); box-shadow: 0 0 7px rgba(255,194,77,0.5); }
 .tour-skip { flex: 0 0 auto; white-space: nowrap; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.06em; color: var(--ink-faint);
