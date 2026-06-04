@@ -8,12 +8,16 @@
   "densityToggleTitle":    { "message": "表示密度を切り替え" },
   "densityToggleAriaLabel":{ "message": "表示密度" },
   "helpToggleTitle":       { "message": "使い方を見る" },
-  "editToggleTitle":       { "message": "編集モード" },
-  "editLabel":             { "message": "編集" },
-  "doneLabel":             { "message": "完了" },
+
+  "moreActionsTitle":      { "message": "操作" },
+  "menuEdit":              { "message": "編集" },
+  "menuEditSpace":         { "message": "名前と色を編集" },
+  "menuRename":            { "message": "名前を変更" },
+  "menuChangeColor":       { "message": "色を変更" },
+  "okLabel":               { "message": "OK" },
+  "confirmTitle":          { "message": "確認" },
 
   "spacesAriaLabel":       { "message": "スペース" },
-  "spaceEditBtnTitle":     { "message": "編集" },
   "addSpaceTitle":         { "message": "スペースを追加（バーにフォルダを作成）" },
 
   "openAllLabel":          { "message": "すべて開く" },
@@ -25,10 +29,8 @@
   "addCurrentTabLabel":    { "message": "現在のタブ" },
 
   "resetTabTitle":         { "message": "今のタブをこのURLに戻す" },
-  "anchorDeleteTitle":     { "message": "削除（ブックマークを削除）" },
   "currentlyOpenTitle":    { "message": "現在このタブが開いています" },
 
-  "pinDeleteTitle":        { "message": "ピンを削除" },
   "pinCurrentTabTitle":    { "message": "現在のタブをピン" },
   "pinDragHint":           { "message": "タブをここへドラッグでピン" },
 
