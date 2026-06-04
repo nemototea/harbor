@@ -153,6 +153,23 @@ async function resetActiveTo(url) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) await chrome.tabs.update(tab.id, { url });
 }
+// reorder a live tab next to a target row. chrome.tabs.move uses final-index
+// semantics (like bookmarks.move), so adjust by one when shifting forward.
+// Indices are re-read fresh (the rendered snapshot may be stale); Chrome
+// natively keeps tab groups contiguous and pinned tabs leading.
+async function moveLiveTab(srcTabId, targetTabId, after) {
+  try {
+    const [src, target] = await Promise.all([
+      chrome.tabs.get(srcTabId).catch(() => null),
+      chrome.tabs.get(targetTabId).catch(() => null),
+    ]);
+    if (!src || !target) return;
+    let dest = target.index + (after ? 1 : 0);
+    if (src.index < dest) dest -= 1;
+    if (dest === src.index) return;
+    await chrome.tabs.move(srcTabId, { index: dest });
+  } catch (err) { console.warn("Harbor: tab move failed", err); }
+}
 
 /* ---------- space verbs ---------- */
 async function openAllInActiveSpace() {
@@ -733,10 +750,26 @@ function buildTabRow(tab, grouped, g, anchorKeys, splitCount) {
   row.append(img, title, split, moored, grp, pin, close);
   row.addEventListener("click", () => chrome.tabs.update(tab.id, { active: true }));
   row.addEventListener("dragstart", (e) => { dnd = { kind: "live", tabId: tab.id }; row.classList.add("dragging"); e.dataTransfer.effectAllowed = "copyMove"; });
+  // reorder LIVE tabs by dropping one row onto another (vertical before/after)
+  row.addEventListener("dragover", (e) => {
+    if (!dnd || dnd.kind !== "live" || dnd.tabId === tab.id) return;
+    e.preventDefault(); e.stopPropagation();
+    const r = row.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2;
+    row.classList.toggle("drop-after", after); row.classList.toggle("drop-before", !after);
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("drop-before", "drop-after"));
+  row.addEventListener("drop", async (e) => {
+    if (!dnd || dnd.kind !== "live" || dnd.tabId === tab.id) return;
+    e.preventDefault(); e.stopPropagation();
+    const r = row.getBoundingClientRect(); const after = e.clientY > r.top + r.height / 2;
+    const srcId = dnd.tabId; dnd = null;
+    await moveLiveTab(srcId, tab.id, after);
+  });
   row.addEventListener("dragend", () => {
     row.classList.remove("dragging");
     document.querySelectorAll(".grid,.pins").forEach((g2) => g2.classList.remove("drop-into"));
     document.querySelectorAll(".group-head").forEach((h) => h.classList.remove("drop-join"));
+    document.querySelectorAll(".trow").forEach((r2) => r2.classList.remove("drop-before", "drop-after"));
     dnd = null;
   });
   return row;
