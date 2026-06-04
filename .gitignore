@@ -20,3 +20,4 @@ assets/frames/
 
 # Agent/editor local
 .claude/
+harbor-*.zip
