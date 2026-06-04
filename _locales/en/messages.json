@@ -1,0 +1,114 @@
+{
+  "extDescription":        { "message": "A side panel workspace manager using your bookmark bar as anchors. Stop using tabs as storage." },
+  "actionTitle":           { "message": "Open Harbor" },
+  "commandDescription":    { "message": "Open / Close Harbor" },
+
+  "filterPlaceholder":     { "message": "Filter" },
+  "filterAriaLabel":       { "message": "Filter anchors" },
+  "densityToggleTitle":    { "message": "Toggle display density" },
+  "densityToggleAriaLabel":{ "message": "Display density" },
+  "helpToggleTitle":       { "message": "How to use" },
+  "editToggleTitle":       { "message": "Edit mode" },
+  "editLabel":             { "message": "Edit" },
+  "doneLabel":             { "message": "Done" },
+
+  "spacesAriaLabel":       { "message": "Spaces" },
+  "spaceEditBtnTitle":     { "message": "Edit" },
+  "addSpaceTitle":         { "message": "Add space (creates a folder in bookmark bar)" },
+
+  "openAllLabel":          { "message": "Open all" },
+  "openAllTitle":          { "message": "Open all anchors in this space" },
+  "tidyBtnLabel":          { "message": "Tidy" },
+  "tidyBtnTitle":          { "message": "Close tabs not saved anywhere" },
+  "noSpacesHint":          { "message": "No spaces yet.<br>Use the \"+\" button above to create a folder in your bookmark bar as a space.<br>Loose bookmarks appear in PINS above." },
+  "untitled":              { "message": "(Untitled)" },
+  "addCurrentTabLabel":    { "message": "Current tab" },
+
+  "resetTabTitle":         { "message": "Reset active tab to this URL" },
+  "anchorDeleteTitle":     { "message": "Delete (removes bookmark)" },
+  "currentlyOpenTitle":    { "message": "This tab is currently open" },
+
+  "pinDeleteTitle":        { "message": "Remove pin" },
+  "pinCurrentTabTitle":    { "message": "Pin current tab" },
+  "pinDragHint":           { "message": "Drag a tab here to pin" },
+
+  "noOpenTabs":            { "message": "No open tabs" },
+  "mooredTitle":           { "message": "Registered as anchor" },
+  "splitViewTitle":        { "message": "Split view (create/close via browser)" },
+  "removeFromGroupTitle":  { "message": "Remove from group" },
+  "createGroupTitle":      { "message": "Add to new group" },
+  "anchorAddToSpaceTitle": { "message": "Add as anchor (to this space)" },
+  "tabCloseTitle":         { "message": "Close tab" },
+
+  "groupColorTitle":       { "message": "Change group color" },
+  "groupDefaultName":      { "message": "Group" },
+  "groupRenameHint":       { "message": "Double-click to rename" },
+  "ungroupTitle":          { "message": "Ungroup" },
+  "groupNamePrompt":       { "message": "Group name" },
+
+  "footerHint":            { "message": "Click to open · Drag tab to grid to anchor · Drag to group header to join · 1–9 for spaces" },
+  "undoLabel":             { "message": "Undo" },
+  "deletedMsg": {
+    "message": "Deleted \"$NAME$\"",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+
+  "anchorAddModalTitle":   { "message": "Add anchor" },
+  "anchorEditModalTitle":  { "message": "Edit anchor" },
+  "nameLabel":             { "message": "Name" },
+  "urlLabel":              { "message": "URL" },
+  "spaceSelectLabel":      { "message": "Space" },
+  "deleteLabel":           { "message": "Delete" },
+  "cancelLabel":           { "message": "Cancel" },
+  "saveLabel":             { "message": "Save" },
+  "pinsOption":            { "message": "PINS (bookmark bar root)" },
+
+  "spaceAddModalTitle":    { "message": "Add space" },
+  "spaceEditModalTitle":   { "message": "Edit space" },
+  "colorLabel":            { "message": "Color" },
+  "spaceDefaultName":      { "message": "Space" },
+
+  "tidyConfirm": {
+    "message": "Close $COUNT$ unsaved tab(s)? This cannot be undone.",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "deleteSpaceConfirm": {
+    "message": "Delete space \"$NAME$\" and its $COUNT$ anchor(s) (bookmarks)?",
+    "placeholders": {
+      "name":  { "content": "$1" },
+      "count": { "content": "$2" }
+    }
+  },
+
+  "tourSkipLabel":  { "message": "Skip" },
+  "tourBackLabel":  { "message": "Back" },
+  "tourNextLabel":  { "message": "Next" },
+  "tourStartLabel": { "message": "Get started" },
+
+  "tour0Key":   { "message": "Harbor · Chart" },
+  "tour0Title": { "message": "Welcome to Harbor." },
+  "tour0Body":  { "message": "A workspace dock to stop using tabs as storage. Separates <b>anchored places</b> (where you return) from <b>live flow</b> (open tabs). A 30-second tour." },
+
+  "tour1Key":   { "message": "01 · Spaces" },
+  "tour1Title": { "message": "Space = work context" },
+  "tour1Body":  { "message": "<b>Folders</b> directly under your bookmark bar become spaces. Create with \"+\". Switch with <b>1–9</b> keys or horizontal swipe." },
+
+  "tour2Key":   { "message": "02 · PINS" },
+  "tour2Title": { "message": "Always-visible favorites" },
+  "tour2Body":  { "message": "Bookmarks placed directly on the bar (not in a folder) appear here regardless of space. Drag a tab here to pin." },
+
+  "tour3Key":   { "message": "03 · Anchored" },
+  "tour3Title": { "message": "Return points for this space" },
+  "tour3Body":  { "message": "Fix pages you return to as <b>anchors</b>. \"Current tab\" adds today's page; \"Open all\" reopens them together. Lit tiles mean the tab is currently open." },
+
+  "tour4Key":   { "message": "04 · Live flow" },
+  "tour4Title": { "message": "Currently open tabs" },
+  "tour4Body":  { "message": "Your tabs listed vertically. <b>⚓</b> promotes a tab to an anchor in this space. \"Tidy\" closes tabs not saved anywhere." },
+
+  "tour5Key":   { "message": "Chart complete" },
+  "tour5Title": { "message": "Now set sail." },
+  "tour5Body": {
+    "message": "<b>$MODIFIER$+Shift+K</b> opens/closes the panel anytime. This tour is always available from the <b>?</b> button.",
+    "placeholders": { "modifier": { "content": "$1" } }
+  }
+}

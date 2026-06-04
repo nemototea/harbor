@@ -1,0 +1,114 @@
+{
+  "extDescription":        { "message": "ブックマークバーを錨(Anchor)として空間管理するサイドパネル。タブを保存場所にしない。" },
+  "actionTitle":           { "message": "Harbor を開く" },
+  "commandDescription":    { "message": "Harbor を開く / 閉じる" },
+
+  "filterPlaceholder":     { "message": "絞り込み" },
+  "filterAriaLabel":       { "message": "錨を絞り込み" },
+  "densityToggleTitle":    { "message": "表示密度を切り替え" },
+  "densityToggleAriaLabel":{ "message": "表示密度" },
+  "helpToggleTitle":       { "message": "使い方を見る" },
+  "editToggleTitle":       { "message": "編集モード" },
+  "editLabel":             { "message": "編集" },
+  "doneLabel":             { "message": "完了" },
+
+  "spacesAriaLabel":       { "message": "スペース" },
+  "spaceEditBtnTitle":     { "message": "編集" },
+  "addSpaceTitle":         { "message": "スペースを追加（バーにフォルダを作成）" },
+
+  "openAllLabel":          { "message": "すべて開く" },
+  "openAllTitle":          { "message": "このスペースの錨をすべて開く" },
+  "tidyBtnLabel":          { "message": "片付け" },
+  "tidyBtnTitle":          { "message": "どこにも保存していないタブを閉じる" },
+  "noSpacesHint":          { "message": "スペースがありません。<br>上部の「＋」でブックマークバーにフォルダ＝スペースを作成。<br>裸のブックマークは上の PINS に並びます。" },
+  "untitled":              { "message": "(無題)" },
+  "addCurrentTabLabel":    { "message": "現在のタブ" },
+
+  "resetTabTitle":         { "message": "今のタブをこのURLに戻す" },
+  "anchorDeleteTitle":     { "message": "削除（ブックマークを削除）" },
+  "currentlyOpenTitle":    { "message": "現在このタブが開いています" },
+
+  "pinDeleteTitle":        { "message": "ピンを削除" },
+  "pinCurrentTabTitle":    { "message": "現在のタブをピン" },
+  "pinDragHint":           { "message": "タブをここへドラッグでピン" },
+
+  "noOpenTabs":            { "message": "開いているタブはありません" },
+  "mooredTitle":           { "message": "錨として登録済み" },
+  "splitViewTitle":        { "message": "分割ビュー（作成/解除はブラウザ操作）" },
+  "removeFromGroupTitle":  { "message": "グループから外す" },
+  "createGroupTitle":      { "message": "新規グループ化" },
+  "anchorAddToSpaceTitle": { "message": "錨に追加（このスペースへ）" },
+  "tabCloseTitle":         { "message": "タブを閉じる" },
+
+  "groupColorTitle":       { "message": "グループの色を変更" },
+  "groupDefaultName":      { "message": "グループ" },
+  "groupRenameHint":       { "message": "ダブルクリックで名前を変更" },
+  "ungroupTitle":          { "message": "グループを解除" },
+  "groupNamePrompt":       { "message": "グループ名" },
+
+  "footerHint":            { "message": "クリックで開く · タブをグリッドへドラッグで係留 · グループヘッダへドラッグで仲間入り · 1–9 でスペース" },
+  "undoLabel":             { "message": "元に戻す" },
+  "deletedMsg": {
+    "message": "「$NAME$」を削除",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+
+  "anchorAddModalTitle":   { "message": "錨を追加" },
+  "anchorEditModalTitle":  { "message": "錨を編集" },
+  "nameLabel":             { "message": "名前" },
+  "urlLabel":              { "message": "URL" },
+  "spaceSelectLabel":      { "message": "スペース" },
+  "deleteLabel":           { "message": "削除" },
+  "cancelLabel":           { "message": "キャンセル" },
+  "saveLabel":             { "message": "保存" },
+  "pinsOption":            { "message": "PINS（バー直下）" },
+
+  "spaceAddModalTitle":    { "message": "スペースを追加" },
+  "spaceEditModalTitle":   { "message": "スペースを編集" },
+  "colorLabel":            { "message": "色" },
+  "spaceDefaultName":      { "message": "スペース" },
+
+  "tidyConfirm": {
+    "message": "どこにも保存していないタブ $COUNT$ 件を閉じます。よろしいですか?",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "deleteSpaceConfirm": {
+    "message": "スペース「$NAME$」とその中の錨 $COUNT$ 件（ブックマーク）を削除します。よろしいですか?",
+    "placeholders": {
+      "name":  { "content": "$1" },
+      "count": { "content": "$2" }
+    }
+  },
+
+  "tourSkipLabel":  { "message": "スキップ" },
+  "tourBackLabel":  { "message": "戻る" },
+  "tourNextLabel":  { "message": "次へ" },
+  "tourStartLabel": { "message": "はじめる" },
+
+  "tour0Key":   { "message": "Harbor · 海図" },
+  "tour0Title": { "message": "ようこそ、Harbor へ。" },
+  "tour0Body":  { "message": "タブを物置にしないための作業港です。<b>係留したもの</b>（また戻る場所）と、<b>いま流れているもの</b>（開いているタブ）を分けて扱います。30秒だけ案内します。" },
+
+  "tour1Key":   { "message": "01 · スペース" },
+  "tour1Title": { "message": "スペース = 作業の文脈" },
+  "tour1Body":  { "message": "ブックマークバー直下の<b>フォルダ</b>が、そのままスペースになります。「＋」で作成。<b>1〜9</b> キーや横スワイプでも切り替えられます。" },
+
+  "tour2Key":   { "message": "02 · PINS" },
+  "tour2Title": { "message": "どこでも出る定番" },
+  "tour2Body":  { "message": "バーに裸で置いたブックマークは、スペースを問わず常にこの列に並びます。タブをここへドラッグすればピン留め。" },
+
+  "tour3Key":   { "message": "03 · 係留 / ANCHORED" },
+  "tour3Title": { "message": "このスペースの戻り先" },
+  "tour3Body":  { "message": "よく戻るページを<b>錨</b>として固定します。「現在のタブ」で今のページを追加、「すべて開く」でまとめて復帰。点灯しているタイルは、いまそのタブが開いている印です。" },
+
+  "tour4Key":   { "message": "04 · 流れ / LIVE" },
+  "tour4Title": { "message": "いま開いているタブ" },
+  "tour4Body":  { "message": "現在のタブを縦に一覧。<b>⚓</b> でこのスペースの錨へ格上げ、「片付け」でどこにも保存していないタブだけを閉じられます。" },
+
+  "tour5Key":   { "message": "海図 完成" },
+  "tour5Title": { "message": "あとは航海するだけ。" },
+  "tour5Body": {
+    "message": "<b>$MODIFIER$+Shift+K</b> でいつでもパネルを開閉。この案内は右上の <b>?</b> からいつでも見直せます。",
+    "placeholders": { "modifier": { "content": "$1" } }
+  }
+}
